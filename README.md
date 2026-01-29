@@ -9,7 +9,7 @@
 ## 特性
 
 - **Markdown ↔ 飞书文档** - 双向无损转换，支持 40+ 种块类型
-- **Mermaid 图表** - 自动转换为飞书画板，支持 7 种图表类型
+- **Mermaid/PlantUML 图表** - 自动转换为飞书画板，支持 7 种 Mermaid + PlantUML 全类型
 - **智能表格处理** - 列宽自动计算，大表格自动拆分
 - **完整 API 覆盖** - 文档、知识库、表格、消息、日历、任务、权限等
 - **AI 技能集成** - 为 Claude Code 等 AI 助手提供飞书操作能力
@@ -91,9 +91,9 @@ feishu-cli doc import README.md --title "项目文档" --upload-images
 
 **支持的语法**：标题、段落、列表、任务列表、代码块、引用、表格、分割线、图片、链接、粗体/斜体/删除线
 
-### Mermaid 图表
+### Mermaid / PlantUML 图表
 
-Markdown 中的 Mermaid 代码块会自动转换为飞书画板：
+Markdown 中的 Mermaid 和 PlantUML 代码块会自动转换为飞书画板：
 
 ````markdown
 ```mermaid
@@ -104,7 +104,18 @@ flowchart TD
 ```
 ````
 
-**支持的图表类型**：flowchart、sequenceDiagram、classDiagram、stateDiagram-v2、erDiagram、gantt、pie
+````markdown
+```plantuml
+@startuml
+Alice -> Bob: Hello
+Bob --> Alice: Hi
+@enduml
+```
+````
+
+**支持的 Mermaid 图表类型**：flowchart、sequenceDiagram、classDiagram、stateDiagram-v2、erDiagram、gantt、pie
+
+**PlantUML**：支持时序图、活动图、类图、用例图、组件图、ER 图、思维导图等（` ```plantuml ` 或 ` ```puml `）
 
 ### 智能表格
 
@@ -215,6 +226,7 @@ feishu-cli perm add <doc_id> \
 | `- [ ] 任务` | Todo | 任务列表 |
 | ` ```代码``` ` | Code | 代码块 |
 | ` ```mermaid``` ` | Board | 自动转画板 |
+| ` ```plantuml``` ` / ` ```puml``` ` | Board | 自动转画板 |
 | `> 引用` | Quote | 引用块 |
 | `---` | Divider | 分割线 |
 | `\| 表格 \|` | Table | 自动拆分 |

@@ -1,6 +1,6 @@
 ---
 name: feishu-cli-write
-description: 向飞书文档写入内容，支持 Mermaid 图表自动转画板。当用户请求创建、写入、更新飞书文档时使用。推荐使用 Mermaid 画图。
+description: 向飞书文档写入内容，支持 Mermaid/PlantUML 图表自动转画板。当用户请求创建、写入、更新飞书文档时使用。推荐使用 Mermaid 画图。
 argument-hint: <title|document_id> [content]
 user-invocable: true
 allowed-tools: Bash, Write, Read
@@ -8,7 +8,7 @@ allowed-tools: Bash, Write, Read
 
 # 飞书文档写入技能
 
-创建或更新飞书云文档，通过 Markdown 作为中间格式。**支持 Mermaid 图表自动转飞书画板**。
+创建或更新飞书云文档，通过 Markdown 作为中间格式。**支持 Mermaid/PlantUML 图表自动转飞书画板**。
 
 ## 核心概念
 
@@ -76,6 +76,7 @@ allowed-tools: Bash, Write, Read
 | `- [ ] 任务` | Todo | |
 | `` ```code``` `` | Code | |
 | `` ```mermaid``` `` | **Board（画板）** | **推荐使用** |
+| `` ```plantuml``` `` / `` ```puml``` `` | **Board（画板）** | PlantUML 图表 |
 | `> 引用` | Quote | |
 | `---` | Divider | |
 | `**粗体**` | 粗体样式 | |
@@ -85,9 +86,9 @@ allowed-tools: Bash, Write, Read
 | `[链接](url)` | 链接 | |
 | `| 表格 |` | Table | 超过9行自动拆分，列宽自动计算 |
 
-### 推荐：使用 Mermaid 画图
+### 推荐：使用 Mermaid / PlantUML 画图
 
-在文档中画图时，**推荐使用 Mermaid**（而非截图），会自动转换为飞书画板：
+在文档中画图时，**推荐使用 Mermaid**（也支持 PlantUML），会自动转换为飞书画板：
 
 ````markdown
 ```mermaid
@@ -98,7 +99,16 @@ flowchart TD
 ```
 ````
 
-支持的图表类型（全部已验证 2026-01-27）：
+````markdown
+```plantuml
+@startuml
+Alice -> Bob: Hello
+Bob --> Alice: Hi
+@enduml
+```
+````
+
+支持的 Mermaid 图表类型（全部已验证 2026-01-27）：
 - ✅ flowchart（流程图，支持 subgraph）
 - ✅ sequenceDiagram（时序图）
 - ✅ classDiagram（类图）
@@ -106,6 +116,13 @@ flowchart TD
 - ✅ erDiagram（ER 图）
 - ✅ gantt（甘特图）
 - ✅ pie（饼图）
+
+**Mermaid 注意事项**：
+- 避免在节点标签中使用 `{}` 花括号（如 `{version}`），会触发解析错误
+- **禁止使用 `par...and...end`**，飞书解析器完全不支持，改用 `Note over X: 并行执行...`
+- sequenceDiagram 渲染复杂度组合超限：10+ participant + 2+ alt 块 + 30+ 长消息标签会触发服务端 500
+- 安全阈值：participant ≤8、alt ≤1、消息标签尽量简短
+- 导入失败的图表会自动降级为代码块展示
 
 ## 输出格式
 

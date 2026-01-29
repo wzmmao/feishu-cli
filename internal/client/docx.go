@@ -334,7 +334,7 @@ func BatchUpdateBlocks(documentID string, requestsJSON string, opts BatchUpdateB
 	return result, nil
 }
 
-// GetBlockChildren retrieves children of a block
+// GetBlockChildren retrieves children of a block (first page only)
 func GetBlockChildren(documentID string, blockID string) ([]*larkdocx.Block, error) {
 	client, err := GetClient()
 	if err != nil {
@@ -356,6 +356,52 @@ func GetBlockChildren(documentID string, blockID string) ([]*larkdocx.Block, err
 	}
 
 	return resp.Data.Items, nil
+}
+
+// GetAllBlockChildren retrieves all direct children of a block with pagination
+func GetAllBlockChildren(documentID string, blockID string) ([]*larkdocx.Block, error) {
+	client, err := GetClient()
+	if err != nil {
+		return nil, err
+	}
+
+	var allChildren []*larkdocx.Block
+	pageToken := ""
+	pageSize := 500
+	const maxPages = 1000
+
+	for page := 0; page < maxPages; page++ {
+		reqBuilder := larkdocx.NewGetDocumentBlockChildrenReqBuilder().
+			DocumentId(documentID).
+			BlockId(blockID).
+			PageSize(pageSize).
+			DocumentRevisionId(-1)
+
+		if pageToken != "" {
+			reqBuilder.PageToken(pageToken)
+		}
+
+		resp, err := client.Docx.DocumentBlockChildren.Get(Context(), reqBuilder.Build())
+		if err != nil {
+			return nil, fmt.Errorf("获取子块失败: %w", err)
+		}
+
+		if !resp.Success() {
+			return nil, fmt.Errorf("获取子块失败: code=%d, msg=%s", resp.Code, resp.Msg)
+		}
+
+		allChildren = append(allChildren, resp.Data.Items...)
+
+		if resp.Data.HasMore == nil || !*resp.Data.HasMore {
+			break
+		}
+		if resp.Data.PageToken == nil || *resp.Data.PageToken == "" {
+			break
+		}
+		pageToken = *resp.Data.PageToken
+	}
+
+	return allChildren, nil
 }
 
 // AddBoardResult contains the result of adding a board to document
@@ -456,10 +502,6 @@ func FillTableCells(documentID string, cellIDs []string, contents []string) erro
 					break
 				}
 				if err == nil {
-					// Successfully updated, skip to next cell
-					if i%10 == 9 {
-						time.Sleep(100 * time.Millisecond)
-					}
 					continue
 				}
 				// If update failed, fall through to create new block
@@ -497,9 +539,9 @@ func FillTableCells(documentID string, cellIDs []string, contents []string) erro
 			return fmt.Errorf("填充单元格 %d 失败: %w", i, err)
 		}
 
-		// Small delay between cells to avoid rate limiting
-		if i%10 == 9 {
-			time.Sleep(100 * time.Millisecond)
+		// 每 5 个单元格短暂暂停，避免触发频率限制
+		if i%5 == 4 {
+			time.Sleep(200 * time.Millisecond)
 		}
 	}
 

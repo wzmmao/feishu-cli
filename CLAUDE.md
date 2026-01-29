@@ -6,9 +6,9 @@
 
 ## 核心功能：Markdown 转换
 
-### Mermaid 图表转画板
+### Mermaid / PlantUML 图表转画板
 
-**推荐用户使用 Mermaid 画图**，导入时会自动转换为飞书画板：
+**推荐用户使用 Mermaid 画图**，导入时会自动转换为飞书画板。同时支持 PlantUML（` ```plantuml ` 或 ` ```puml `）：
 
 ```bash
 feishu-cli doc import doc.md --title "技术文档" --verbose
@@ -23,7 +23,9 @@ feishu-cli doc import doc.md --title "技术文档" --verbose
 - ✅ gantt（甘特图）
 - ✅ pie（饼图）
 
-**技术实现**：使用飞书画板 API `/nodes/plantuml` 端点，`syntax_type=2` 表示 Mermaid 语法。
+PlantUML 支持：时序图、活动图、类图、用例图、组件图、ER 图、思维导图等全部 PlantUML 图表类型。
+
+**技术实现**：使用飞书画板 API `/nodes/plantuml` 端点，`syntax_type=1` 表示 PlantUML，`syntax_type=2` 表示 Mermaid。
 
 ### 大表格自动拆分
 
@@ -37,9 +39,11 @@ feishu-cli doc import doc.md --title "技术文档" --verbose
 - **列宽自动计算**：根据内容自动计算列宽（中文 14px，英文 8px，最小 80px，最大 400px）
 - **空行问题修复**：飞书 API 创建表格时会自动在单元格内创建空文本块，现已改为更新现有块而非创建新块
 
-### Mermaid 导入优化（2026-01-28 更新）
+### 图表导入优化（2026-01-29 更新）
 
-- **服务端错误重试**：500 错误时自动重试 3 次，指数退避（2s, 4s, 6s）
+- **服务端错误重试**：最多重试 10 次，固定 1s 间隔
+- **永久错误不重试**：Parse error、Invalid request parameter 直接降级为代码块
+- **失败回退**：删除空画板块，在原位置插入代码块
 
 ### 已验证的大规模导入
 
@@ -196,6 +200,7 @@ go vet ./...
 ./feishu-cli doc blocks <doc_id> --all               # 获取所有块（自动分页）
 ./feishu-cli doc export <doc_id> -o output.md
 ./feishu-cli doc import input.md --title "导入的文档"
+./feishu-cli doc import input.md --title "文档" --diagram-workers 5 --table-workers 3 --verbose
 ./feishu-cli doc add <doc_id> -c '[{"block_type":2,"text":{"elements":[{"text_run":{"content":"文本"}}]}}]'  # JSON 格式
 ./feishu-cli doc add <doc_id> README.md --content-type markdown  # Markdown 格式
 ./feishu-cli doc add-callout <doc_id> "提示内容" --callout-type info  # 添加高亮块
@@ -328,7 +333,7 @@ app_secret: "xxx"
 | 16 | Equation | `$$formula$$` | 公式 |
 | 17 | Todo | `- [x]` / `- [ ]` | 待办事项 |
 | 19 | Callout | `> [!NOTE]` | 高亮块 |
-| 21 | Diagram | Mermaid | 图表（自动转画板） |
+| 21 | Diagram | Mermaid/PlantUML | 图表（自动转画板） |
 | 22 | Divider | `---` | 分隔线 |
 | 27 | Image | `![](url)` | 图片 |
 | 31 | Table | Markdown 表格 | 表格 |
@@ -464,7 +469,10 @@ export FEISHU_APP_SECRET=<your_app_secret>
 | 表格行数 | 单个表格最多 9 行 | 自动拆分为多个表格 |
 | 批量创建块 | 每次最多 50 个块 | 自动分批处理 |
 | API 频率限制 | 请求过快会返回 429 | 自动重试 + 延迟 |
-| Mermaid 间隔 | 画板创建需要间隔 | 每个图表间隔 2 秒 |
+| 图表并发 | 并发导入 Mermaid/PlantUML 图表 | worker 池（默认 5 并发） |
+| Mermaid 花括号 | `{text}` 被识别为菱形节点导致 Parse error | 自动降级为代码块 |
+| Mermaid par 语法 | `par...and...end` 飞书解析器完全不支持 | 用 `Note over X` 替代 |
+| Mermaid 复杂度 | 10+ participant + 2+ alt + 30+ 长消息标签组合超限 → 500 | 重试后降级为代码块 |
 | sheet filter create | V3 API 需要完整的 col+condition 参数，仅 range 不足 | API 限制 |
 | sheet protect | V2 API 返回 "invalid operation"，可能是权限或 API 格式问题 | 待修复 |
 | sheet formatter | 简单小数格式如 "0.00" 无效，需使用 "#,##0.00"（带千位分隔符） | API 限制 |
@@ -502,6 +510,7 @@ export FEISHU_APP_SECRET=<your_app_secret>
 ✅ sheet find/replace（查找替换，范围需要 sheetId! 前缀）
 
 ✅ Mermaid 图表导入（20个图表类型全部验证通过）
+✅ PlantUML 图表导入（时序图、活动图已验证）
 
 ✅ sheet read-plain/read-rich（V3 API 纯文本/富文本读取，支持多范围批量获取）
 ✅ sheet write-rich（V3 API 富文本写入，支持文本样式）
@@ -546,11 +555,46 @@ export FEISHU_APP_SECRET=<your_app_secret>
 - 如果有，使用 `UpdateBlock` 更新现有块的内容
 - 如果没有或更新失败，才创建新块
 
-### Mermaid 导入重试机制（2026-01-28）
+### 图表导入重试机制（2026-01-28）
 
-**问题**：部分 Mermaid 图表导入时服务端返回 500 错误
+**问题**：部分图表导入时服务端返回 500 错误
 
 **修复**（`cmd/import_markdown.go`）：
-- 添加重试机制，最多重试 3 次
-- 指数退避：2 秒、4 秒、6 秒
-- 仅对 500 服务端错误重试，其他错误直接返回
+- 重试机制：最多重试 10 次，固定 1s 间隔
+- Parse error 和 Invalid request parameter 视为永久错误，不重试
+- 失败回退：删除空画板块，在原位置插入代码块
+
+### 三阶段并发管道（2026-01-29）
+
+**重构**（`cmd/import_markdown.go`）：
+- **阶段一（顺序）**：按文档顺序创建所有块（`index=-1` 追加），收集 Mermaid/PlantUML 和表格任务
+- **阶段二（并发）**：图表 worker 池 + 表格 worker 池，使用 `sync.WaitGroup` + buffered channel 做信号量
+- **阶段三（逆序）**：按逆序处理失败的图表，删除空画板块后插入代码块作为降级
+- CLI flags：`--diagram-workers`（默认 5）、`--table-workers`（默认 3）、`--diagram-retries`（默认 10）
+- 向后兼容：`--mermaid-workers` 和 `--mermaid-retries` 作为隐藏别名保留
+
+**辅助修改**（`internal/client/docx.go`）：
+- 新增 `GetAllBlockChildren()` 函数，支持分页获取子块
+- `FillTableCells` 每 5 个单元格暂停 200ms 避免频率限制
+
+**表格并发修复**（`cmd/import_markdown.go`）：
+- `processTableTask` 新增 429 重试（最多 3 次，指数退避 2s/4s/6s）
+- `isRateLimitError` 函数判断 429/99991400/frequency limit
+
+**渲染复杂度二分法实测**（2026-01-29）：
+- 安全：participant ≤8 或 alt ≤1 或消息标签简短
+- 超限：10 participant + 2 alt + 30 条长消息标签
+- 任何单一因素不触发，是组合超限
+
+### Mermaid 逐个测试记录（2026-01-29）
+
+**测试方法**：从 11 个模块分析文件中提取 88 个 Mermaid 图表，逐个创建画板并导入
+
+**结果**：82/88 成功（93.2%）
+
+| 失败类型 | 数量 | 原因 | 处理方式 |
+|----------|------|------|----------|
+| Parse error | 2 | `{version}`、`{message: "pong"}` 花括号语法 | 自动降级为代码块 |
+| 服务端渲染超限 | 2 | participant × 别名长度 × 消息数 × 标签长度组合复杂度过高 | 重试后降级为代码块 |
+| 瞬时服务端错误 | 1 | 偶发 HTTP 500 | 重试成功 |
+| 提取异常 | 1 | 测试脚本 bug（分隔符混入） | 不影响程序 |

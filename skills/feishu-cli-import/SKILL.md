@@ -1,6 +1,6 @@
 ---
 name: feishu-cli-import
-description: 从 Markdown 文件导入创建飞书文档，支持 Mermaid 图表自动转画板、大表格自动拆分。当用户请求"导入 Markdown"、"从 md 创建文档"、"上传 Markdown"时使用。
+description: 从 Markdown 文件导入创建飞书文档，支持 Mermaid/PlantUML 图表自动转画板、大表格自动拆分。当用户请求"导入 Markdown"、"从 md 创建文档"、"上传 Markdown"时使用。
 argument-hint: <markdown_file> [--title "标题"] [--verbose]
 user-invocable: true
 allowed-tools: Bash, Read
@@ -8,15 +8,17 @@ allowed-tools: Bash, Read
 
 # Markdown 导入技能
 
-从本地 Markdown 文件创建或更新飞书云文档。**支持 Mermaid 图表转飞书画板、大表格自动拆分**。
+从本地 Markdown 文件创建或更新飞书云文档。**支持 Mermaid/PlantUML 图表转飞书画板、大表格自动拆分**。
 
 ## 核心特性
 
-1. **Mermaid → 飞书画板**：Mermaid 代码块自动转换为飞书画板（推荐使用 Mermaid 画图）
-2. **大表格自动拆分**：超过 9 行的表格自动拆分为多个表格，每个保留表头
-3. **表格列宽自动计算**：根据内容智能计算列宽（中英文区分，最小 80px，最大 400px）
-4. **API 限流处理**：自动重试，避免 429 错误
-5. **Mermaid 服务端错误重试**：500 错误时自动重试 3 次（指数退避）
+1. **三阶段并发管道**：顺序创建块 → 并发处理图表/表格 → 失败回退
+2. **Mermaid/PlantUML → 飞书画板**：`mermaid`/`plantuml`/`puml` 代码块自动转换为飞书画板
+3. **图表故障容错**：语法错误自动降级为代码块展示，服务端错误自动重试（最多 10 次，1s 间隔）
+4. **大表格自动拆分**：超过 9 行的表格自动拆分为多个表格，每个保留表头
+5. **表格列宽自动计算**：根据内容智能计算列宽（中英文区分，最小 80px，最大 400px）
+6. **API 限流处理**：自动重试，避免 429 错误
+7. **并发控制**：图表和表格分别使用独立的 worker 池（默认图表 5、表格 3 并发）
 
 ## 核心概念
 
@@ -73,6 +75,10 @@ allowed-tools: Bash, Read
 | --title | 新文档标题 | 文件名 |
 | --document-id | 更新已有文档 | 创建新文档 |
 | --upload-images | 上传本地图片 | 否 |
+| --diagram-workers | 图表 (Mermaid/PlantUML) 并发导入数 | 5 |
+| --table-workers | 表格并发填充数 | 3 |
+| --diagram-retries | 图表最大重试次数 | 10 |
+| --verbose | 显示详细进度信息 | 否 |
 
 ## 支持的 Markdown 语法
 
@@ -81,14 +87,14 @@ allowed-tools: Bash, Read
 - 无序/有序列表
 - 任务列表（- [ ] / - [x]）
 - 代码块（带语言标识）
-- **Mermaid 图表** → 自动转换为飞书画板
+- **Mermaid/PlantUML 图表** → 自动转换为飞书画板
 - 引用块
 - 分割线
 - **表格**（超过 9 行自动拆分）
 - 粗体、斜体、删除线、行内代码
 - 链接
 
-### Mermaid 图表示例（推荐使用）
+### 图表示例（推荐使用 Mermaid）
 
 ````markdown
 ```mermaid
@@ -99,7 +105,16 @@ flowchart TD
 ```
 ````
 
-支持的图表类型（全部已验证）：
+````markdown
+```plantuml
+@startuml
+Alice -> Bob: Hello
+Bob --> Alice: Hi
+@enduml
+```
+````
+
+支持的 Mermaid 图表类型（全部已验证）：
 - ✅ flowchart（流程图，支持 subgraph 嵌套）
 - ✅ sequenceDiagram（时序图）
 - ✅ classDiagram（类图）
@@ -142,7 +157,7 @@ flowchart TD
 | 有序列表 | ✅ 正常 | |
 | 任务列表 | ✅ 正常 | |
 | 代码块 | ✅ 正常 | |
-| **Mermaid 图表** | ✅ 正常 | 自动转为飞书画板 |
+| **Mermaid/PlantUML 图表** | ✅ 正常 | 自动转为飞书画板 |
 | 引用块 | ✅ 正常 | |
 | 分割线 | ✅ 正常 | |
 | **粗体**/`*斜体*` | ✅ 正常 | |
@@ -151,27 +166,40 @@ flowchart TD
 
 ### 大规模测试结果
 
-已验证可成功导入的大型文档（2026-01-28）：
+已验证可成功导入的大型文档（2026-01-29）：
 - **10,000+ 行 Markdown** ✓
 - **127 个 Mermaid 图表** → 全部成功转换为飞书画板 ✓
 - **170+ 个表格**（含大表格拆分、列宽自动计算）→ 全部成功 ✓
 - **7 种图表类型** → flowchart/sequenceDiagram/classDiagram/stateDiagram/erDiagram/gantt/pie 全部成功 ✓
+- **88 个 Mermaid 图表逐个测试** → 82/88 成功，6 个失败（3 个服务端瞬时错误 + 2 个花括号语法 + 1 个提取异常）
 
-### 最新修复（2026-01-28）
+### 三阶段并发管道架构（2026-01-29）
 
-- **表格列宽自动计算**：根据内容智能计算列宽，避免内容拥挤
-- **表格空行修复**：修复了飞书 API 自动创建空文本块导致的重复行问题
-- **Mermaid 重试机制**：服务端 500 错误时自动重试 3 次
+1. **阶段一（顺序）**：创建所有文档块，收集图表（Mermaid/PlantUML）和表格任务
+2. **阶段二（并发）**：使用 worker 池并发处理图表导入和表格填充
+3. **阶段三（逆序）**：处理失败的图表 → 删除空画板块，插入代码块作为降级展示
 
-**测试命令**：
-```bash
-feishu-cli doc import report.md --title "技术报告" --verbose
-# 输出: 添加块数: 2089, 表格: 236成功, Mermaid: 77/77成功
-```
+### Mermaid 已知限制
+
+| 限制 | 说明 | 处理方式 |
+|------|------|----------|
+| `{}` 花括号 | Mermaid 解析器将 `{text}` 识别为菱形节点 | 自动降级为代码块 |
+| `par...and...end` | 飞书解析器完全不支持 par 并行语法 | 用 `Note over X: 并行执行` 替代 |
+| 渲染复杂度组合超限 | 单一因素不会触发，但 10+ participant + 2+ alt 块 + 30+ 长消息标签组合时服务端返回 500 | 重试后降级为代码块 |
+| 服务端瞬时错误 | 偶发 HTTP 500（并发压力导致） | 自动重试（最多 10 次，1s 间隔） |
+| Parse error 不重试 | 语法错误直接降级 | 自动降级为代码块 |
+
+**渲染复杂度安全阈值**（二分法实测）：
+- participant ≤8 或 alt ≤1 或消息标签简短 → 安全
+- 10 participant + 2 alt + 30 条长消息标签 → 超限
+- 建议：sequenceDiagram 保持 participant ≤8、alt ≤1、消息标签简短
 
 ### 技术说明
 
-Mermaid 图表通过飞书画板 API 导入：
+图表通过飞书画板 API 导入：
 - API 端点：`/open-apis/board/v1/whiteboards/{id}/nodes/plantuml`
-- `syntax_type=2` 表示 Mermaid 语法
+- `syntax_type=1` 表示 PlantUML 语法，`syntax_type=2` 表示 Mermaid 语法
 - `diagram_type` 使用整数（0=auto, 6=flowchart 等）
+- 重试策略：固定 1s 间隔，Parse error 和 Invalid request parameter 不重试
+- 失败回退：删除空画板块，在原位置插入代码块
+- 支持的代码块标识：` ```mermaid `、` ```plantuml `、` ```puml `

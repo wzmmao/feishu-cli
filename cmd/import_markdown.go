@@ -6,22 +6,35 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	larkdocx "github.com/larksuite/oapi-sdk-go/v3/service/docx/v1"
 	"github.com/riba2534/feishu-cli/internal/client"
 	"github.com/riba2534/feishu-cli/internal/config"
 	"github.com/riba2534/feishu-cli/internal/converter"
 	"github.com/spf13/cobra"
 )
 
+// printMu 保护并发 goroutine 的日志输出不交叉
+var printMu sync.Mutex
+
+// syncPrintf 线程安全的 Printf，用于并发阶段的日志输出
+func syncPrintf(format string, a ...any) {
+	printMu.Lock()
+	defer printMu.Unlock()
+	fmt.Printf(format, a...)
+}
+
 // segment 表示 Markdown 中的一个片段
 type segment struct {
-	kind    string // "markdown" 或 "mermaid"
+	kind    string // "markdown"、"mermaid" 或 "plantuml"
 	content string
 }
 
-// parseMarkdownSegments 将 Markdown 解析为片段，分离出 mermaid 代码块
+// parseMarkdownSegments 将 Markdown 解析为片段，分离出 mermaid 和 plantuml 代码块
 func parseMarkdownSegments(markdown string) []segment {
 	var segments []segment
 	lines := strings.Split(markdown, "\n")
@@ -30,19 +43,28 @@ func parseMarkdownSegments(markdown string) []segment {
 
 	for i < len(lines) {
 		line := lines[i]
-		// 检查是否是 mermaid 代码块开始
-		if strings.HasPrefix(strings.TrimSpace(line), "```mermaid") {
+		trimmed := strings.TrimSpace(line)
+
+		// 检查是否是图表代码块开始（mermaid / plantuml / puml）
+		var diagramKind string
+		if strings.HasPrefix(trimmed, "```mermaid") {
+			diagramKind = "mermaid"
+		} else if strings.HasPrefix(trimmed, "```plantuml") || strings.HasPrefix(trimmed, "```puml") {
+			diagramKind = "plantuml"
+		}
+
+		if diagramKind != "" {
 			// 先保存之前的普通内容
 			if len(buf) > 0 {
 				segments = append(segments, segment{kind: "markdown", content: strings.Join(buf, "\n")})
 				buf = nil
 			}
 
-			// 收集 mermaid 代码块内容
+			// 收集图表代码块内容
 			i++
-			var mermaidLines []string
+			var diagramLines []string
 			for i < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i]), "```") {
-				mermaidLines = append(mermaidLines, lines[i])
+				diagramLines = append(diagramLines, lines[i])
 				i++
 			}
 			// 跳过结束的 ```
@@ -50,8 +72,8 @@ func parseMarkdownSegments(markdown string) []segment {
 				i++
 			}
 
-			if len(mermaidLines) > 0 {
-				segments = append(segments, segment{kind: "mermaid", content: strings.Join(mermaidLines, "\n")})
+			if len(diagramLines) > 0 {
+				segments = append(segments, segment{kind: diagramKind, content: strings.Join(diagramLines, "\n")})
 			}
 		} else {
 			buf = append(buf, line)
@@ -67,10 +89,73 @@ func parseMarkdownSegments(markdown string) []segment {
 	return segments
 }
 
-// countMermaidBlocks 统计 mermaid 代码块数量
-func countMermaidBlocks(markdown string) int {
-	re := regexp.MustCompile("(?m)^```mermaid")
-	return len(re.FindAllString(markdown, -1))
+// diagramSyntaxLabel 返回图表语法的显示标签
+func diagramSyntaxLabel(syntax string) string {
+	if syntax == "plantuml" {
+		return "PlantUML"
+	}
+	return "Mermaid"
+}
+
+// countDiagramBlocks 统计图表代码块数量（Mermaid + PlantUML）
+func countDiagramBlocks(markdown string) (mermaidCount, plantumlCount int) {
+	reMermaid := regexp.MustCompile("(?m)^```mermaid")
+	mermaidCount = len(reMermaid.FindAllString(markdown, -1))
+	rePlantuml := regexp.MustCompile("(?m)^```(?:plantuml|puml)")
+	plantumlCount = len(rePlantuml.FindAllString(markdown, -1))
+	return
+}
+
+// --- 三阶段流水线数据结构 ---
+
+// diagramTask 表示一个待导入的图表任务（Mermaid 或 PlantUML）
+type diagramTask struct {
+	index        int    // 序号 (1-based)
+	content      string // 图表源码
+	syntax       string // "mermaid" 或 "plantuml"
+	boardBlockID string // 画板块 ID
+	whiteboardID string // 画板 token
+}
+
+// diagramResult 表示图表导入的结果
+type diagramResult struct {
+	task    diagramTask
+	success bool
+	err     error
+	retries int
+}
+
+// tableTask 表示一个待填充的表格任务
+type tableTask struct {
+	index        int // 序号 (1-based)
+	tableBlockID string
+	tableData    *converter.TableData
+}
+
+// tableResult 表示表格填充的结果
+type tableResult struct {
+	task    tableTask
+	success bool
+	err     error
+}
+
+// importStats 记录导入统计信息
+type importStats struct {
+	mu              sync.Mutex
+	totalBlocks     int
+	diagramTotal    int
+	diagramSuccess  int
+	diagramFailed   int
+	mermaidCount    int // Mermaid 图表数（用于分类统计）
+	plantumlCount   int // PlantUML 图表数（用于分类统计）
+	tableTotal      int
+	tableSuccess    int
+	tableFailed     int
+	fallbackSuccess int
+	fallbackFailed  int
+	phase1Duration  time.Duration
+	phase2Duration  time.Duration
+	phase3Duration  time.Duration
 }
 
 var importMarkdownCmd = &cobra.Command{
@@ -79,14 +164,16 @@ var importMarkdownCmd = &cobra.Command{
 	Long: `从 Markdown 文件导入内容，创建新的飞书文档或更新已有文档。
 
 特性:
-  - 支持 Mermaid 图表自动转换为飞书画板
-  - 支持表格、代码块、列表等标准 Markdown 语法
-  - 大文件自动分段写入
+  - 三阶段流水线: 顺序创建 → 并发处理 → 降级容错
+  - Mermaid/PlantUML 图表自动转换为飞书画板 (重试+失败降级为代码块)
+  - 表格并发填充，大表格自动拆分
+  - 详细进度和耗时统计
 
 示例:
   feishu-cli doc import doc.md --title "我的文档"
   feishu-cli doc import doc.md --document-id ABC123def456
-  feishu-cli doc import doc.md --title "我的文档" --upload-images`,
+  feishu-cli doc import doc.md --title "我的文档" --verbose
+  feishu-cli doc import doc.md --title "测试" --diagram-workers 5 --table-workers 8`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := config.Validate(); err != nil {
@@ -99,6 +186,17 @@ var importMarkdownCmd = &cobra.Command{
 		uploadImages, _ := cmd.Flags().GetBool("upload-images")
 		folder, _ := cmd.Flags().GetString("folder")
 		verbose, _ := cmd.Flags().GetBool("verbose")
+		diagramWorkers, _ := cmd.Flags().GetInt("diagram-workers")
+		tableWorkers, _ := cmd.Flags().GetInt("table-workers")
+		diagramRetries, _ := cmd.Flags().GetInt("diagram-retries")
+
+		// 向后兼容: 如果用户使用了旧的 --mermaid-workers/--mermaid-retries，覆盖新值
+		if cmd.Flags().Changed("mermaid-workers") {
+			diagramWorkers, _ = cmd.Flags().GetInt("mermaid-workers")
+		}
+		if cmd.Flags().Changed("mermaid-retries") {
+			diagramRetries, _ = cmd.Flags().GetInt("mermaid-retries")
+		}
 
 		// 检查文件大小限制（100MB）
 		const maxFileSize = 100 * 1024 * 1024
@@ -119,10 +217,18 @@ var importMarkdownCmd = &cobra.Command{
 		basePath := filepath.Dir(filePath)
 		markdownText := string(content)
 
-		// 统计 mermaid 数量
-		mermaidCount := countMermaidBlocks(markdownText)
-		if verbose && mermaidCount > 0 {
-			fmt.Printf("[信息] 检测到 %d 个 Mermaid 图表\n", mermaidCount)
+		// 统计图表数量
+		mermaidCount, plantumlCount := countDiagramBlocks(markdownText)
+		diagramCount := mermaidCount + plantumlCount
+		if verbose && diagramCount > 0 {
+			var parts []string
+			if mermaidCount > 0 {
+				parts = append(parts, fmt.Sprintf("%d 个 Mermaid", mermaidCount))
+			}
+			if plantumlCount > 0 {
+				parts = append(parts, fmt.Sprintf("%d 个 PlantUML", plantumlCount))
+			}
+			fmt.Printf("[信息] 检测到 %s 图表\n", strings.Join(parts, ", "))
 		}
 
 		// If no document ID, create new document
@@ -134,7 +240,6 @@ var importMarkdownCmd = &cobra.Command{
 				if len(ext) < len(title) {
 					title = title[:len(title)-len(ext)]
 				}
-				// If title is still empty, use a default
 				if title == "" {
 					title = "无标题文档"
 				}
@@ -149,202 +254,528 @@ var importMarkdownCmd = &cobra.Command{
 			}
 			documentID = *doc.DocumentId
 			fmt.Printf("已创建文档: %s\n", documentID)
-			fmt.Printf("链接: https://feishu.cn/docx/%s\n", documentID)
+			fmt.Printf("链接: https://feishu.cn/docx/%s\n\n", documentID)
 		}
 
 		// 解析 Markdown 为片段
 		segments := parseMarkdownSegments(markdownText)
 
-		var totalBlocks int
-		var mermaidSuccess int
-		mermaidIdx := 0
+		stats := &importStats{
+			diagramTotal:  diagramCount,
+			mermaidCount:  mermaidCount,
+			plantumlCount: plantumlCount,
+		}
 
-		var tableSuccess, tableFailed int
+		// === 阶段 1/3: 顺序创建文档块 ===
+		fmt.Println("=== 阶段 1/3: 创建文档块 ===")
+		phase1Start := time.Now()
 
-		for _, seg := range segments {
-			if seg.kind == "markdown" {
-				// 普通 Markdown 内容，转换为块并添加
-				if strings.TrimSpace(seg.content) == "" {
-					continue
-				}
+		dTasks, tTasks, err := phase1CreateBlocks(documentID, segments, uploadImages, basePath, stats, verbose)
+		if err != nil {
+			return err
+		}
 
-				options := converter.ConvertOptions{
-					UploadImages: uploadImages,
-					DocumentID:   documentID,
-				}
+		stats.phase1Duration = time.Since(phase1Start)
+		stats.tableTotal = len(tTasks)
+		fmt.Printf("[阶段1] 完成 (%.1fs), 块: %d, 待填表格: %d, 待导入图表: %d\n\n",
+			stats.phase1Duration.Seconds(), stats.totalBlocks, len(tTasks), len(dTasks))
 
-				conv := converter.NewMarkdownToBlock([]byte(seg.content), options, basePath)
-				result, err := conv.ConvertWithTableData()
-				if err != nil {
-					return fmt.Errorf("转换 Markdown 失败: %w", err)
-				}
+		// === 阶段 2/3: 并发处理 ===
+		if len(dTasks) > 0 || len(tTasks) > 0 {
+			fmt.Printf("=== 阶段 2/3: 并发处理 (图表×%d, 表格×%d) ===\n", diagramWorkers, tableWorkers)
+			phase2Start := time.Now()
 
-				if len(result.Blocks) == 0 {
-					continue
-				}
+			failedDiagrams := phase2ConcurrentProcess(documentID, dTasks, tTasks, diagramWorkers, tableWorkers, diagramRetries, stats, verbose)
 
-				// 记录表格块的索引，用于后续填充内容
-				var tableIndices []int
-				for i, block := range result.Blocks {
-					if block.BlockType != nil && *block.BlockType == 31 { // BlockTypeTable
-						tableIndices = append(tableIndices, i)
-					}
-				}
+			stats.phase2Duration = time.Since(phase2Start)
+			fmt.Printf("[阶段2] 完成 (%.1fs), 图表: %d/%d, 表格: %d/%d\n\n",
+				stats.phase2Duration.Seconds(),
+				stats.diagramSuccess, stats.diagramTotal,
+				stats.tableSuccess, stats.tableTotal)
 
-				// 批量添加块（飞书 API 限制每次最多 50 个块）
-				const batchSize = 50
-				var createdBlockIDs []string
-				for i := 0; i < len(result.Blocks); i += batchSize {
-					end := i + batchSize
-					if end > len(result.Blocks) {
-						end = len(result.Blocks)
-					}
-					batch := result.Blocks[i:end]
+			// === 阶段 3/3: 降级处理 ===
+			if len(failedDiagrams) > 0 {
+				fmt.Printf("=== 阶段 3/3: 降级处理 (%d 个) ===\n", len(failedDiagrams))
+				phase3Start := time.Now()
 
-					createdBlocks, err := client.CreateBlock(documentID, documentID, batch, -1)
-					if err != nil {
-						return fmt.Errorf("添加内容失败: %w", err)
-					}
-					totalBlocks += len(createdBlocks)
+				phase3HandleFallbacks(documentID, failedDiagrams, stats, verbose)
 
-					// 收集创建的块 ID
-					for _, block := range createdBlocks {
-						if block.BlockId != nil {
-							createdBlockIDs = append(createdBlockIDs, *block.BlockId)
-						}
-					}
-				}
-
-				// 填充表格内容
-				tableDataIdx := 0
-				for _, tableIdx := range tableIndices {
-					if tableIdx >= len(createdBlockIDs) || tableDataIdx >= len(result.TableDatas) {
-						continue
-					}
-
-					tableBlockID := createdBlockIDs[tableIdx]
-					tableData := result.TableDatas[tableDataIdx]
-					tableDataIdx++
-
-					if verbose {
-						fmt.Printf("[表格] 填充表格内容 (%d×%d)...\n", tableData.Rows, tableData.Cols)
-					}
-
-					// 获取表格单元格 ID
-					cellIDs, err := client.GetTableCellIDs(documentID, tableBlockID)
-					if err != nil {
-						if verbose {
-							fmt.Printf("  ⚠ 获取表格单元格失败: %v\n", err)
-						}
-						tableFailed++
-						continue
-					}
-
-					// 填充单元格内容
-					if err := client.FillTableCells(documentID, cellIDs, tableData.CellContents); err != nil {
-						if verbose {
-							fmt.Printf("  ⚠ 填充表格内容失败: %v\n", err)
-						}
-						tableFailed++
-						continue
-					}
-
-					tableSuccess++
-					if verbose {
-						fmt.Printf("  ✓ 表格填充成功\n")
-					}
-
-					// 避免频控
-					time.Sleep(300 * time.Millisecond)
-				}
-
-			} else if seg.kind == "mermaid" {
-				mermaidIdx++
-				if verbose {
-					fmt.Printf("[渲染] Mermaid 图表 %d/%d...\n", mermaidIdx, mermaidCount)
-				}
-
-				// 创建画板
-				boardResult, err := client.AddBoard(documentID, "", -1)
-				if err != nil {
-					fmt.Printf("⚠ Mermaid 图表 %d 创建画板失败: %v\n", mermaidIdx, err)
-					continue
-				}
-
-				if boardResult.WhiteboardID == "" {
-					fmt.Printf("⚠ Mermaid 图表 %d 未返回画板 ID\n", mermaidIdx)
-					continue
-				}
-
-				// 导入 mermaid 图表到画板（带重试机制处理服务端 500 错误）
-				opts := client.ImportDiagramOptions{
-					SourceType: "content",
-					Syntax:     "mermaid",
-				}
-
-				var importErr error
-				maxRetries := 3
-				for retry := 0; retry < maxRetries; retry++ {
-					_, importErr = client.ImportDiagram(boardResult.WhiteboardID, seg.content, opts)
-					if importErr == nil {
-						break
-					}
-					// 检查是否是服务端 500 错误（临时性错误，值得重试）
-					if strings.Contains(importErr.Error(), "500") || strings.Contains(importErr.Error(), "internal error") {
-						if verbose && retry < maxRetries-1 {
-							fmt.Printf("  ⚠ 服务端错误，%d 秒后重试 (%d/%d)...\n", (retry+1)*2, retry+1, maxRetries-1)
-						}
-						time.Sleep(time.Duration((retry+1)*2) * time.Second)
-						continue
-					}
-					// 非 500 错误，不重试
-					break
-				}
-				if importErr != nil {
-					fmt.Printf("⚠ Mermaid 图表 %d 导入失败: %v\n", mermaidIdx, importErr)
-					continue
-				}
-
-				mermaidSuccess++
-				totalBlocks++
-
-				if verbose {
-					fmt.Printf("  ✓ Mermaid 图表 %d 成功\n", mermaidIdx)
-				}
-
-				// 避免频控，等待一段时间
-				if mermaidIdx < mermaidCount {
-					time.Sleep(2 * time.Second)
-				}
+				stats.phase3Duration = time.Since(phase3Start)
+				fmt.Printf("[阶段3] 完成 (%.1fs), 降级成功: %d/%d\n\n",
+					stats.phase3Duration.Seconds(),
+					stats.fallbackSuccess, stats.fallbackSuccess+stats.fallbackFailed)
 			}
 		}
 
+		// === 输出结果 ===
+		totalDuration := stats.phase1Duration + stats.phase2Duration + stats.phase3Duration
+
 		output, _ := cmd.Flags().GetString("output")
 		if output == "json" {
-			data, _ := json.MarshalIndent(map[string]interface{}{
-				"document_id":     documentID,
-				"blocks":          totalBlocks,
-				"mermaid_total":   mermaidCount,
-				"mermaid_success": mermaidSuccess,
-				"table_success":   tableSuccess,
-				"table_failed":    tableFailed,
+			data, _ := json.MarshalIndent(map[string]any{
+				"document_id":       documentID,
+				"blocks":            stats.totalBlocks,
+				"diagram_total":     stats.diagramTotal,
+				"diagram_success":   stats.diagramSuccess,
+				"diagram_failed":    stats.diagramFailed,
+				"mermaid_count":     stats.mermaidCount,
+				"plantuml_count":    stats.plantumlCount,
+				"diagram_fallback":  stats.fallbackSuccess,
+				"table_total":       stats.tableTotal,
+				"table_success":     stats.tableSuccess,
+				"table_failed":      stats.tableFailed,
+				"duration_seconds":  totalDuration.Seconds(),
+				"phase1_seconds":    stats.phase1Duration.Seconds(),
+				"phase2_seconds":    stats.phase2Duration.Seconds(),
+				"phase3_seconds":    stats.phase3Duration.Seconds(),
 			}, "", "  ")
 			fmt.Println(string(data))
 		} else {
-			fmt.Printf("导入成功!\n")
+			fmt.Println("导入完成!")
 			fmt.Printf("  文档ID: %s\n", documentID)
-			fmt.Printf("  添加块数: %d\n", totalBlocks)
-			if tableSuccess > 0 || tableFailed > 0 {
-				fmt.Printf("  表格: %d 成功, %d 失败\n", tableSuccess, tableFailed)
+			fmt.Printf("  添加块数: %d\n", stats.totalBlocks)
+			if stats.tableTotal > 0 {
+				fmt.Printf("  表格: %d/%d 成功\n", stats.tableSuccess, stats.tableTotal)
 			}
-			if mermaidCount > 0 {
-				fmt.Printf("  Mermaid图表: %d/%d 成功\n", mermaidSuccess, mermaidCount)
+			if stats.diagramTotal > 0 {
+				var diagramDetail string
+				if stats.mermaidCount > 0 && stats.plantumlCount > 0 {
+					diagramDetail = fmt.Sprintf(" (Mermaid: %d, PlantUML: %d)", stats.mermaidCount, stats.plantumlCount)
+				}
+				if stats.fallbackSuccess > 0 {
+					fmt.Printf("  图表: %d/%d 成功%s (%d 降级为代码块)\n",
+						stats.diagramSuccess, stats.diagramTotal, diagramDetail, stats.fallbackSuccess)
+				} else {
+					fmt.Printf("  图表: %d/%d 成功%s\n", stats.diagramSuccess, stats.diagramTotal, diagramDetail)
+				}
 			}
+			fmt.Printf("  总耗时: %.1fs\n", totalDuration.Seconds())
 			fmt.Printf("  链接: https://feishu.cn/docx/%s\n", documentID)
 		}
 
 		return nil
 	},
+}
+
+// phase1CreateBlocks 顺序创建所有文档块，收集待处理的图表和表格任务
+func phase1CreateBlocks(
+	documentID string,
+	segments []segment,
+	uploadImages bool,
+	basePath string,
+	stats *importStats,
+	verbose bool,
+) ([]diagramTask, []tableTask, error) {
+	var dTasks []diagramTask
+	var tTasks []tableTask
+	diagramIdx := 0
+
+	for segIdx, seg := range segments {
+		if seg.kind == "markdown" {
+			if strings.TrimSpace(seg.content) == "" {
+				continue
+			}
+
+			options := converter.ConvertOptions{
+				UploadImages: uploadImages,
+				DocumentID:   documentID,
+			}
+
+			conv := converter.NewMarkdownToBlock([]byte(seg.content), options, basePath)
+			result, err := conv.ConvertWithTableData()
+			if err != nil {
+				return nil, nil, fmt.Errorf("转换 Markdown 失败 (段落 %d): %w", segIdx+1, err)
+			}
+
+			if len(result.Blocks) == 0 {
+				continue
+			}
+
+			// 记录表格块的索引
+			var tableIndices []int
+			for i, block := range result.Blocks {
+				if block.BlockType != nil && *block.BlockType == 31 { // BlockTypeTable
+					tableIndices = append(tableIndices, i)
+				}
+			}
+
+			// 批量添加块（飞书 API 限制每次最多 50 个块）
+			const batchSize = 50
+			var createdBlockIDs []string
+			for i := 0; i < len(result.Blocks); i += batchSize {
+				end := i + batchSize
+				if end > len(result.Blocks) {
+					end = len(result.Blocks)
+				}
+				batch := result.Blocks[i:end]
+
+				createdBlocks, err := client.CreateBlock(documentID, documentID, batch, -1)
+				if err != nil {
+					return nil, nil, fmt.Errorf("添加内容失败 (段落 %d): %w", segIdx+1, err)
+				}
+				stats.totalBlocks += len(createdBlocks)
+
+				for _, block := range createdBlocks {
+					if block.BlockId != nil {
+						createdBlockIDs = append(createdBlockIDs, *block.BlockId)
+					}
+				}
+			}
+
+			if verbose {
+				fmt.Printf("  [段落 %d] 创建 %d 个块, %d 个表格\n", segIdx+1, len(createdBlockIDs), len(tableIndices))
+			}
+
+			// 收集表格任务（不立即填充）
+			tableDataIdx := 0
+			for _, tableIdx := range tableIndices {
+				if tableIdx >= len(createdBlockIDs) || tableDataIdx >= len(result.TableDatas) {
+					continue
+				}
+
+				tTasks = append(tTasks, tableTask{
+					index:        len(tTasks) + 1,
+					tableBlockID: createdBlockIDs[tableIdx],
+					tableData:    result.TableDatas[tableDataIdx],
+				})
+				tableDataIdx++
+			}
+
+		} else if seg.kind == "mermaid" || seg.kind == "plantuml" {
+			diagramIdx++
+			syntaxLabel := diagramSyntaxLabel(seg.kind)
+
+			if verbose {
+				fmt.Printf("  [%s %d] 创建画板占位块...\n", syntaxLabel, diagramIdx)
+			}
+
+			// 只创建画板占位块，不导入图表
+			boardResult, err := client.AddBoard(documentID, "", -1)
+			if err != nil {
+				fmt.Printf("  ✗ %s %d 创建画板失败: %v\n", syntaxLabel, diagramIdx, err)
+				stats.diagramFailed++
+				continue
+			}
+
+			if boardResult.WhiteboardID == "" {
+				fmt.Printf("  ✗ %s %d 未返回画板 ID\n", syntaxLabel, diagramIdx)
+				stats.diagramFailed++
+				continue
+			}
+
+			stats.totalBlocks++
+
+			dTasks = append(dTasks, diagramTask{
+				index:        diagramIdx,
+				content:      seg.content,
+				syntax:       seg.kind,
+				boardBlockID: boardResult.BlockID,
+				whiteboardID: boardResult.WhiteboardID,
+			})
+
+			if verbose {
+				fmt.Printf("  [%s %d] 画板已创建: %s\n", syntaxLabel, diagramIdx, boardResult.WhiteboardID)
+			}
+		}
+	}
+
+	return dTasks, tTasks, nil
+}
+
+// phase2ConcurrentProcess 并发处理图表导入和表格填充
+func phase2ConcurrentProcess(
+	documentID string,
+	dTasks []diagramTask,
+	tTasks []tableTask,
+	diagramWorkers int,
+	tableWorkers int,
+	maxRetries int,
+	stats *importStats,
+	verbose bool,
+) []diagramResult {
+	var wg sync.WaitGroup
+	diagramResults := make([]diagramResult, len(dTasks))
+
+	// 图表信号量
+	diagramSem := make(chan struct{}, diagramWorkers)
+	// 表格信号量
+	tableSem := make(chan struct{}, tableWorkers)
+
+	// 启动图表工作
+	for i, task := range dTasks {
+		wg.Add(1)
+		go func(idx int, t diagramTask) {
+			defer wg.Done()
+			diagramSem <- struct{}{}
+			defer func() { <-diagramSem }()
+
+			result := processDiagramTask(t, maxRetries, verbose)
+			diagramResults[idx] = result
+
+			stats.mu.Lock()
+			if result.success {
+				stats.diagramSuccess++
+			} else {
+				stats.diagramFailed++
+			}
+			stats.mu.Unlock()
+		}(i, task)
+	}
+
+	// 启动表格工作
+	for _, task := range tTasks {
+		wg.Add(1)
+		go func(t tableTask) {
+			defer wg.Done()
+			tableSem <- struct{}{}
+			defer func() { <-tableSem }()
+
+			result := processTableTask(documentID, t, verbose)
+
+			stats.mu.Lock()
+			if result.success {
+				stats.tableSuccess++
+			} else {
+				stats.tableFailed++
+			}
+			stats.mu.Unlock()
+		}(task)
+	}
+
+	wg.Wait()
+
+	// 收集失败的图表任务
+	var failedDiagrams []diagramResult
+	for _, r := range diagramResults {
+		if !r.success {
+			failedDiagrams = append(failedDiagrams, r)
+		}
+	}
+
+	return failedDiagrams
+}
+
+// processDiagramTask 处理单个图表导入任务（Mermaid/PlantUML），带重试
+func processDiagramTask(task diagramTask, maxRetries int, verbose bool) diagramResult {
+	syntaxLabel := diagramSyntaxLabel(task.syntax)
+
+	opts := client.ImportDiagramOptions{
+		SourceType: "content",
+		Syntax:     task.syntax,
+	}
+
+	var lastErr error
+	var lastRetry int
+	for retry := 0; retry <= maxRetries; retry++ {
+		lastRetry = retry
+		_, err := client.ImportDiagram(task.whiteboardID, task.content, opts)
+		if err == nil {
+			if verbose {
+				if retry > 0 {
+					syncPrintf("  ✓ %s %d 成功 (重试 %d 次)\n", syntaxLabel, task.index, retry)
+				} else {
+					syncPrintf("  ✓ %s %d 成功\n", syntaxLabel, task.index)
+				}
+			}
+			return diagramResult{task: task, success: true, retries: retry}
+		}
+
+		lastErr = err
+
+		// 判断是否值得重试
+		errMsg := err.Error()
+
+		// 语法解析错误不可重试
+		isPermanentError := strings.Contains(errMsg, "Parse error") ||
+			strings.Contains(errMsg, "Invalid request parameter")
+		if isPermanentError {
+			syncPrintf("  ✗ %s %d 语法错误 (不重试): %v\n", syntaxLabel, task.index, err)
+			return diagramResult{task: task, success: false, err: err, retries: retry}
+		}
+
+		isRetryable := strings.Contains(errMsg, "500") ||
+			strings.Contains(errMsg, "502") ||
+			strings.Contains(errMsg, "503") ||
+			strings.Contains(errMsg, "429") ||
+			strings.Contains(errMsg, "internal error") ||
+			strings.Contains(errMsg, "rate limit")
+
+		if !isRetryable {
+			break
+		}
+
+		if retry < maxRetries {
+			if verbose {
+				syncPrintf("  ⚠ %s %d 重试 %d/%d (等待 1s): %v\n",
+					syntaxLabel, task.index, retry+1, maxRetries, err)
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}
+
+	syncPrintf("  ✗ %s %d 失败 (重试%d次): %v\n", syntaxLabel, task.index, lastRetry, lastErr)
+	return diagramResult{task: task, success: false, err: lastErr, retries: lastRetry}
+}
+
+// processTableTask 处理单个表格填充任务（带 429 重试）
+func processTableTask(documentID string, task tableTask, verbose bool) tableResult {
+	if verbose {
+		syncPrintf("  [表格 %d] 填充 %d×%d...\n", task.index, task.tableData.Rows, task.tableData.Cols)
+	}
+
+	const maxRetries = 3
+
+	for retry := 0; retry <= maxRetries; retry++ {
+		if retry > 0 {
+			delay := time.Duration(retry) * 2 * time.Second
+			if verbose {
+				syncPrintf("  ⚠ 表格 %d 重试 %d/%d (等待 %v)...\n", task.index, retry, maxRetries, delay)
+			}
+			time.Sleep(delay)
+		}
+
+		// 获取表格单元格 ID
+		cellIDs, err := client.GetTableCellIDs(documentID, task.tableBlockID)
+		if err != nil {
+			if isRateLimitError(err) && retry < maxRetries {
+				continue
+			}
+			if verbose {
+				syncPrintf("  ✗ 表格 %d 获取单元格失败: %v\n", task.index, err)
+			}
+			return tableResult{task: task, success: false, err: err}
+		}
+
+		// 填充单元格内容
+		if err := client.FillTableCells(documentID, cellIDs, task.tableData.CellContents); err != nil {
+			if isRateLimitError(err) && retry < maxRetries {
+				continue
+			}
+			if verbose {
+				syncPrintf("  ✗ 表格 %d 填充失败: %v\n", task.index, err)
+			}
+			return tableResult{task: task, success: false, err: err}
+		}
+
+		if verbose {
+			syncPrintf("  ✓ 表格 %d 成功\n", task.index)
+		}
+		return tableResult{task: task, success: true}
+	}
+
+	// 不应到达这里
+	return tableResult{task: task, success: false, err: fmt.Errorf("重试耗尽")}
+}
+
+// isRateLimitError 判断是否为频率限制错误
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "429") ||
+		strings.Contains(msg, "99991400") ||
+		strings.Contains(msg, "frequency limit") ||
+		strings.Contains(msg, "rate limit")
+}
+
+// phase3HandleFallbacks 处理失败的图表，降级为代码块
+func phase3HandleFallbacks(
+	documentID string,
+	failedDiagrams []diagramResult,
+	stats *importStats,
+	verbose bool,
+) {
+	// 获取文档顶层子块列表
+	children, err := client.GetAllBlockChildren(documentID, documentID)
+	if err != nil {
+		fmt.Printf("  ✗ 获取文档子块失败，无法降级: %v\n", err)
+		stats.fallbackFailed += len(failedDiagrams)
+		return
+	}
+
+	// 构建 blockID → index 映射
+	blockIDToIndex := make(map[string]int)
+	for i, child := range children {
+		if child.BlockId != nil {
+			blockIDToIndex[*child.BlockId] = i
+		}
+	}
+
+	// 按 index 降序排序失败列表（避免删除时索引偏移）
+	type fallbackItem struct {
+		result diagramResult
+		index  int // 在文档中的索引
+	}
+	var items []fallbackItem
+	for _, r := range failedDiagrams {
+		if idx, ok := blockIDToIndex[r.task.boardBlockID]; ok {
+			items = append(items, fallbackItem{result: r, index: idx})
+		} else {
+			syntaxLabel := diagramSyntaxLabel(r.task.syntax)
+			if verbose {
+				fmt.Printf("  ⚠ %s %d 画板块未找到，跳过降级\n", syntaxLabel, r.task.index)
+			}
+			stats.fallbackFailed++
+		}
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].index > items[j].index // 降序
+	})
+
+	for _, item := range items {
+		syntaxLabel := diagramSyntaxLabel(item.result.task.syntax)
+		if verbose {
+			fmt.Printf("  [降级] %s %d → 代码块 (位置 %d)\n", syntaxLabel, item.result.task.index, item.index)
+		}
+
+		// 1. 删除空画板块
+		err := client.DeleteBlocks(documentID, documentID, item.index, item.index+1)
+		if err != nil {
+			fmt.Printf("  ✗ %s %d 删除画板失败: %v\n", syntaxLabel, item.result.task.index, err)
+			stats.fallbackFailed++
+			continue
+		}
+
+		// 2. 在同位置插入代码块
+		codeBlock := createDiagramCodeBlock(item.result.task.syntax, item.result.task.content)
+		_, err = client.CreateBlock(documentID, documentID, []*larkdocx.Block{codeBlock}, item.index)
+		if err != nil {
+			fmt.Printf("  ✗ %s %d 插入代码块失败: %v\n", syntaxLabel, item.result.task.index, err)
+			stats.fallbackFailed++
+			continue
+		}
+
+		stats.fallbackSuccess++
+		if verbose {
+			fmt.Printf("  ✓ %s %d 降级成功\n", syntaxLabel, item.result.task.index)
+		}
+	}
+}
+
+// createDiagramCodeBlock 创建图表代码块（用于降级）
+func createDiagramCodeBlock(syntax, content string) *larkdocx.Block {
+	blockType := 14 // Code block
+	// Mermaid/PlantUML 没有对应的飞书语言代码，使用 plaintext(1)
+	langCode := 1
+	// 在代码块内容前加上语法标识注释，方便用户识别
+	labeledContent := fmt.Sprintf("// %s diagram\n%s", syntax, content)
+	return &larkdocx.Block{
+		BlockType: &blockType,
+		Code: &larkdocx.Text{
+			Elements: []*larkdocx.TextElement{
+				{
+					TextRun: &larkdocx.TextRun{
+						Content: &labeledContent,
+					},
+				},
+			},
+			Style: &larkdocx.TextStyle{
+				Language: &langCode,
+			},
+		},
+	}
 }
 
 func init() {
@@ -355,4 +786,12 @@ func init() {
 	importMarkdownCmd.Flags().StringP("folder", "f", "", "新文档的文件夹 Token")
 	importMarkdownCmd.Flags().StringP("output", "o", "", "输出格式 (json)")
 	importMarkdownCmd.Flags().BoolP("verbose", "v", false, "显示详细进度")
+	importMarkdownCmd.Flags().Int("diagram-workers", 5, "图表 (Mermaid/PlantUML) 并发导入数")
+	importMarkdownCmd.Flags().Int("table-workers", 3, "表格并发填充数")
+	importMarkdownCmd.Flags().Int("diagram-retries", 10, "图表最大重试次数")
+	// 向后兼容别名
+	importMarkdownCmd.Flags().Int("mermaid-workers", 5, "图表并发导入数 (--diagram-workers 别名)")
+	importMarkdownCmd.Flags().Int("mermaid-retries", 10, "图表最大重试次数 (--diagram-retries 别名)")
+	_ = importMarkdownCmd.Flags().MarkHidden("mermaid-workers")
+	_ = importMarkdownCmd.Flags().MarkHidden("mermaid-retries")
 }
