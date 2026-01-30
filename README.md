@@ -9,7 +9,7 @@
 ## 特性
 
 - **Markdown ↔ 飞书文档** - 双向无损转换，支持 40+ 种块类型
-- **Mermaid/PlantUML 图表** - 自动转换为飞书画板，支持 7 种 Mermaid + PlantUML 全类型
+- **Mermaid/PlantUML 图表** - 自动转换为飞书画板，支持 8 种 Mermaid + PlantUML 全类型
 - **智能表格处理** - 列宽自动计算，大表格自动拆分
 - **完整 API 覆盖** - 文档、知识库、表格、消息、日历、任务、权限等
 - **AI 技能集成** - 为 Claude Code 等 AI 助手提供飞书操作能力
