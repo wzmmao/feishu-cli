@@ -307,29 +307,74 @@ feishu-cli search messages "关键词" --user-access-token <token>
 
 ## 发布 Release 规范
 
+### 完整发版流程
+
 ```bash
 # 1. 确保代码已提交且在 main 分支
 git checkout main && git pull origin main
 
-# 2. 打 tag
-git tag v1.4.0 && git push origin v1.4.0
+# 2. 打 tag（替换为实际版本号）
+VERSION=v1.4.0
+git tag $VERSION && git push origin $VERSION
 
 # 3. 构建所有平台（自动注入版本号和构建时间）
 make build-all
 
-# 4. 创建 GitHub Release
-gh release create v1.4.0 \
-  bin/feishu-cli-linux-amd64 \
-  bin/feishu-cli-linux-arm64 \
-  bin/feishu-cli-darwin-amd64 \
-  bin/feishu-cli-darwin-arm64 \
-  bin/feishu-cli-windows-amd64.exe \
-  --title "v1.4.0" --notes "Release notes" --latest
+# 4. 打包为 tar.gz（必须遵循以下规范）
+cd bin
+for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+  dir="feishu-cli_${VERSION}_${platform}"
+  mkdir -p "$dir"
+  cp "feishu-cli-${platform}" "${dir}/feishu-cli"
+  tar czf "${dir}.tar.gz" "$dir"
+  rm -rf "$dir"
+done
+# Windows 特殊处理（平台名用下划线 windows_amd64）
+dir="feishu-cli_${VERSION}_windows_amd64"
+mkdir -p "$dir"
+cp "feishu-cli-windows-amd64.exe" "${dir}/feishu-cli.exe"
+tar czf "${dir}.tar.gz" "$dir"
+rm -rf "$dir"
+cd ..
+
+# 5. 创建 GitHub Release
+gh release create $VERSION \
+  bin/feishu-cli_${VERSION}_linux-amd64.tar.gz \
+  bin/feishu-cli_${VERSION}_linux-arm64.tar.gz \
+  bin/feishu-cli_${VERSION}_darwin-amd64.tar.gz \
+  bin/feishu-cli_${VERSION}_darwin-arm64.tar.gz \
+  bin/feishu-cli_${VERSION}_windows_amd64.tar.gz \
+  --title "$VERSION" --notes "Release notes" --latest
 ```
 
-**版本号规则**：Major（不兼容变更）/ Minor（新功能）/ Patch（Bug 修复）
+### 打包规范（必须严格遵守）
 
-**注意**：必须使用 `make build-all` 构建，不要直接 `go build`，否则版本号不会注入。
+| 规则 | 说明 |
+|------|------|
+| **文件格式** | 必须 `.tar.gz`，不能上传裸二进制 |
+| **命名格式** | `feishu-cli_{version}_{platform}.tar.gz` |
+| **内部结构** | 包含同名目录，目录内二进制统一命名为 `feishu-cli`（Windows 为 `feishu-cli.exe`） |
+| **平台名称** | `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`, `windows_amd64`（注意 Windows 用下划线） |
+
+**tar.gz 内部结构示例**：
+```
+feishu-cli_v1.4.0_linux-amd64/
+└── feishu-cli            # 统一二进制名（不带平台后缀）
+```
+
+**原因**：`install.sh` 一键安装脚本依赖此命名规范，`find "$tmpdir" -name "feishu-cli"` 按固定名查找二进制。不遵循规范会导致安装失败。
+
+### 版本号规则
+
+- **Major**：不兼容变更
+- **Minor**：新功能
+- **Patch**：Bug 修复
+
+### 注意事项
+
+- 必须使用 `make build-all` 构建，不要直接 `go build`，否则版本号不会注入
+- 打包前先验证 tar.gz 内容：`tar tzf bin/feishu-cli_vX.Y.Z_linux-amd64.tar.gz`
+- 发版后用 `curl -fsSL https://raw.githubusercontent.com/riba2534/feishu-cli/main/install.sh | bash` 验证安装
 
 ## 已知问题
 
