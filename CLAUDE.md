@@ -281,6 +281,7 @@ feishu-cli search messages "关键词" --user-access-token <token>
 | `/feishu-cli-media` | 素材管理 | `/feishu-cli-media upload <file>` |
 | `/feishu-cli-msg` | 消息发送 | `/feishu-cli-msg <receive_id>` |
 | `/feishu-cli-perm` | 权限管理 | `/feishu-cli-perm <doc_token>` |
+| `/feishu-cli-board` | 画板操作（导入图表、下载图片） | `/feishu-cli-board <whiteboard_id>` |
 | `/feishu-cli-plantuml` | PlantUML 生成（飞书画板安全子集） | `/feishu-cli-plantuml <描述>` |
 | `/feishu-cli-calendar` | 日历和日程管理 | `/feishu-cli-calendar list` |
 | `/feishu-cli-task` | 任务管理 | `/feishu-cli-task list` |
@@ -392,6 +393,57 @@ feishu-cli_v1.4.0_linux-amd64/
 | file quota | `file quota` 命令 SDK 未实现 | 不支持 |
 | board import CLI | 命令行单独导入画板，API 返回 404 | API 限制 |
 | board create-notes | API 格式问题 | API 限制 |
+
+## 技能使用规范（Skills）
+
+本项目提供 Claude Code 技能，位于 `skills/` 目录。使用技能时需遵守以下规范：
+
+### 1. 操作完成后必须发送通知
+
+**每次执行完飞书相关操作后，必须立即发送飞书消息通知用户**，告知操作结果。
+
+飞书相关操作包括：
+- 创建/导入飞书文档
+- 更新飞书文档
+- 导出飞书文档
+- 修改文档权限
+- 大文件上传完成
+
+**通知内容必须包含**：
+- 操作类型（创建/更新/导出/权限变更等）
+- 文档链接或导出路径
+- 操作结果摘要
+- 大文档需包含：图表渲染统计（成功/失败数量）、文档规模（行数/段落数）
+
+### 2. 文档创建后必须添加最高权限
+
+**每次创建新飞书文档后，必须立即给指定用户授予 `full_access`（最高权限）**。
+
+**执行命令**：
+```bash
+feishu-cli perm add <DOC_ID> --doc-type docx --member-type email --member-id user@example.com --perm full_access --notification
+```
+
+**full_access 权限包含**：
+- 管理协作者（添加/移除成员、设置权限）
+- 编辑文档内容（修改、删除、添加）
+- 管理文档设置（复制、移动、删除文档）
+- 查看历史版本
+- 导出文档
+
+### 3. 创建飞书文档前必须参考规范
+
+**每次生成将要导入飞书的 Markdown 内容前，必须先参考 `feishu-cli-doc-guide` 技能中的规范**，确保内容兼容飞书。
+
+**核心检查项**：
+- Mermaid 图表：禁止花括号 `{}`（flowchart 标签）、禁止 `par...and...end`、方括号冒号加双引号、sequenceDiagram 参与者 ≤ 8
+- PlantUML 图表：无行首缩进、无 `skinparam`、类图无可见性标记（`+ - # ~`）
+- 表格：超过 9 行会自动拆分，无需手动处理
+- 图片：Open API 不支持插入，仅创建占位块
+- 公式：行内 `$...$`、块级 `$$...$$`（块级降级为行内）
+- Callout：仅 6 种类型（NOTE/WARNING/TIP/CAUTION/IMPORTANT/SUCCESS）
+
+**详细规范**：读取 `skills/feishu-cli-doc-guide/SKILL.md` 和 `references/mermaid-spec.md`
 
 ## 功能测试验证
 

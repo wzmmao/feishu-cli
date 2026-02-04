@@ -1,6 +1,6 @@
 ---
 name: feishu-cli-sheet
-description: 飞书电子表格操作：创建表格、读写单元格、V3 富文本 API、行列操作、样式设置、查找替换。支持 V2 简单数据和 V3 富文本两种 API。当用户需要操作飞书表格、批量处理数据、设置样式时使用。
+description: 飞书电子表格操作：创建表格、读写单元格、V3 富文本 API、行列操作、样式设置、查找替换、单元格图片、工作表保护。支持 V2 简单数据和 V3 富文本两种 API。当用户需要操作飞书表格、批量处理数据、设置样式时使用。
 argument-hint: <spreadsheet_token> [command] [args]
 user-invocable: true
 allowed-tools: Bash, Read
@@ -30,6 +30,8 @@ allowed-tools: Bash, Read
 | 样式设置 | `sheet style` | V2 |
 | 合并单元格 | `sheet merge/unmerge` | V2 |
 | 查找替换 | `sheet find/replace` | V3 |
+| 单元格图片 | `sheet image` | V3 |
+| 工作表保护 | `sheet protect` | V2 |
 
 ## 基本操作
 
@@ -261,6 +263,32 @@ feishu-cli sheet copy-sheet <token> <sheet_id> --title "副本"
 3. **批量操作**：V3 API 支持一次请求多个范围
 4. **使用 --simple 模式**：`insert` 和 `append-rich` 支持 `--simple` 简化输入
 5. **范围格式**：始终使用 `SheetID!A1:B2` 格式，避免歧义
+
+## 单元格图片
+
+向单元格插入图片：
+
+```bash
+# 向单元格插入图片
+feishu-cli sheet image <token> <sheet_id> "A1" --image-token <image_token>
+```
+
+图片需先通过 `feishu-cli media upload` 上传获取 `image_token`。
+
+## 工作表保护
+
+设置工作表保护（限制编辑）：
+
+```bash
+# 保护工作表
+feishu-cli sheet protect <token> <sheet_id> --lock-sheet
+
+# 保护特定范围
+feishu-cli sheet protect <token> <sheet_id> --ranges '[{"sheet_id":"sheet1","start_row":0,"end_row":10,"start_col":0,"end_col":5}]'
+
+# 取消保护
+feishu-cli sheet protect <token> <sheet_id> --unlock
+```
 
 ## 已知问题
 

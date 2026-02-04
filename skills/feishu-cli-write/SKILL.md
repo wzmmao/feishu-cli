@@ -1,6 +1,6 @@
 ---
 name: feishu-cli-write
-description: 向飞书文档写入内容，支持 Mermaid/PlantUML 图表自动转画板。当用户请求创建、写入、更新飞书文档时使用。推荐使用 Mermaid 画图。
+description: 向飞书文档写入内容，支持 Mermaid/PlantUML 图表自动转画板。支持添加画板、Callout、批量更新块等高级操作。当用户请求创建、写入、更新飞书文档时使用。推荐使用 Mermaid 画图。
 argument-hint: <title|document_id> [content]
 user-invocable: true
 allowed-tools: Bash, Write, Read
@@ -163,6 +163,57 @@ Callout 内支持多行文本和子块（列表等）。
 块级公式：
 $$\int_{0}^{\infty} e^{-x^2} dx = \frac{\sqrt{\pi}}{2}$$
 ````
+
+## 高级操作
+
+### 添加画板
+
+向文档添加空白画板：
+
+```bash
+# 在文档末尾添加画板
+feishu-cli doc add-board <document_id>
+
+# 在指定位置添加画板
+feishu-cli doc add-board <document_id> --parent-id <block_id> --index 0
+```
+
+### 添加 Callout
+
+向文档添加高亮块：
+
+```bash
+# 添加信息类型 Callout
+feishu-cli doc add-callout <document_id> "提示内容" --callout-type info
+
+# 添加警告类型 Callout
+feishu-cli doc add-callout <document_id> "警告内容" --callout-type warning
+
+# 指定位置添加
+feishu-cli doc add-callout <document_id> "内容" --callout-type tip --parent-id <block_id> --index 0
+```
+
+Callout 类型：`info` (信息), `warning` (警告), `success` (成功), `danger` (危险), `tip` (提示), `note` (备注)
+
+### 批量更新块
+
+批量更新文档中的块内容：
+
+```bash
+# 从 JSON 文件批量更新
+feishu-cli doc batch-update <document_id> --source-type content --file updates.json
+```
+
+JSON 格式示例：
+```json
+[
+  {
+    "block_id": "block_xxx",
+    "block_type": 2,
+    "content": "更新后的文本内容"
+  }
+]
+```
 
 ## 输出格式
 
