@@ -555,7 +555,17 @@ func phase1CreateBlocks(
 			for idx, children := range nodeChildrenMap {
 				if idx < len(createdBlockIDs) {
 					parentID := createdBlockIDs[idx]
+
 					nestedCount, nestedErr := createNestedChildren(documentID, parentID, children)
+
+					// Callout 块：飞书 API 创建 Callout 时会自动生成一个空文本子块（位于 index 0），
+					// 在实际子块创建完成后将其删除，否则 Callout 中会多出一个空行
+					if idx < len(result.BlockNodes) {
+						node := result.BlockNodes[idx]
+						if node.Block.BlockType != nil && *node.Block.BlockType == int(converter.BlockTypeCallout) {
+							_ = client.DeleteBlocks(documentID, parentID, 0, 1)
+						}
+					}
 					if nestedErr != nil {
 						if verbose {
 							syncPrintf("  ⚠ 段落 %d 嵌套子块创建失败: %v\n", segIdx+1, nestedErr)
