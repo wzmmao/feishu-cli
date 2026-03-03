@@ -1334,6 +1334,118 @@ func TestConvertAddOns(t *testing.T) {
 			},
 			want: "First child\nSecond child",
 		},
+		{
+			name: "addons with textdrawing record",
+			blocks: []*larkdocx.Block{
+				{
+					BlockId:   strPtr("addons1"),
+					BlockType: intPtr(int(BlockTypeAddOns)),
+					AddOns: &larkdocx.AddOns{
+						ComponentTypeId: strPtr(ISVTypeTextDrawing),
+						Record:          strPtr(`{"data":"flowchart LR\nA-->B","view":"chart","theme":"default"}`),
+					},
+				},
+			},
+			want: "```mermaid\nflowchart LR\nA-->B\n```",
+		},
+		{
+			name: "addons with plantuml record",
+			blocks: []*larkdocx.Block{
+				{
+					BlockId:   strPtr("addons2"),
+					BlockType: intPtr(int(BlockTypeAddOns)),
+					AddOns: &larkdocx.AddOns{
+						ComponentTypeId: strPtr(ISVTypeTextDrawing),
+						Record:          strPtr(`{"data":"@startuml\nAlice -> Bob: Hi\n@enduml","view":"plantuml","theme":"default"}`),
+					},
+				},
+			},
+			want: "```plantuml\n@startuml\nAlice -> Bob: Hi\n@enduml\n```",
+		},
+		{
+			name: "addons with invalid record json - fallback to children",
+			blocks: []*larkdocx.Block{
+				{
+					BlockId:   strPtr("addons3"),
+					BlockType: intPtr(int(BlockTypeAddOns)),
+					AddOns: &larkdocx.AddOns{
+						ComponentTypeId: strPtr(ISVTypeTextDrawing),
+						ComponentId:     strPtr("cmp_invalid"),
+						Record:          strPtr(`{"data":"foo"`),
+					},
+					Children: []string{"fallback1"},
+				},
+				createTextBlock("fallback1", "Fallback content"),
+			},
+			want: "Fallback content",
+		},
+		{
+			name: "addons with invalid record json - no children",
+			blocks: []*larkdocx.Block{
+				{
+					BlockId:   strPtr("addons3"),
+					BlockType: intPtr(int(BlockTypeAddOns)),
+					AddOns: &larkdocx.AddOns{
+						ComponentTypeId: strPtr(ISVTypeTextDrawing),
+						ComponentId:     strPtr("cmp_invalid"),
+						Record:          strPtr(`{"data":"foo"`),
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "addons with empty record string - fallback to textdrawing placeholder",
+			blocks: []*larkdocx.Block{
+				{
+					BlockId:   strPtr("addons4"),
+					BlockType: intPtr(int(BlockTypeAddOns)),
+					AddOns: &larkdocx.AddOns{
+						ComponentTypeId: strPtr(ISVTypeTextDrawing),
+						ComponentId:     strPtr("cmp_empty"),
+						Record:          strPtr(""),
+					},
+					Children: []string{"child1"},
+				},
+				createTextBlock("child1", "Child from empty record"),
+			},
+			// Record 为空字符串时，convertAddOns 返回空，回退到 typeID==TextDrawing 占位符
+			want: "[文本绘图组件 (component: cmp_empty)]",
+		},
+		{
+			name: "addons with empty data field in record - fallback to textdrawing placeholder",
+			blocks: []*larkdocx.Block{
+				{
+					BlockId:   strPtr("addons5"),
+					BlockType: intPtr(int(BlockTypeAddOns)),
+					AddOns: &larkdocx.AddOns{
+						ComponentTypeId: strPtr(ISVTypeTextDrawing),
+						ComponentId:     strPtr("cmp_empty_data"),
+						Record:          strPtr(`{"data":"","view":"chart"}`),
+					},
+					Children: []string{"child2"},
+				},
+				createTextBlock("child2", "Child from empty data"),
+			},
+			// Record 有效但 data 为空时，同样回退到 typeID==TextDrawing 占位符
+			want: "[文本绘图组件 (component: cmp_empty_data)]",
+		},
+		{
+			name: "addons with record data takes priority over children",
+			blocks: []*larkdocx.Block{
+				{
+					BlockId:   strPtr("addons6"),
+					BlockType: intPtr(int(BlockTypeAddOns)),
+					AddOns: &larkdocx.AddOns{
+						ComponentTypeId: strPtr(ISVTypeTextDrawing),
+						Record:          strPtr(`{"data":"graph TD\nA-->B","view":"chart"}`),
+					},
+					Children: []string{"child3"},
+				},
+				createTextBlock("child3", "This should NOT appear"),
+			},
+			want: "```mermaid\ngraph TD\nA-->B\n```",
+		},
 	}
 
 	for _, tt := range tests {

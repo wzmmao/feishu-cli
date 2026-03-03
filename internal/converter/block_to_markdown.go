@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -280,7 +281,18 @@ func (c *BlockToMarkdown) convertBlockWithDepth(block *larkdocx.Block, indent in
 		// GridColumn 块由 Grid 块处理，跳过独立处理
 		return "", nil
 	case BlockTypeAddOns:
-		// AddOns/SyncedBlock 展开子块内容
+		// 优先解析小组件内置内容（例如文本绘图的 Mermaid 源码）
+		if block.AddOns != nil {
+			text, err := c.convertAddOns(block)
+			if err != nil {
+				// JSON 解析失败时打日志，回退到子块展开
+				fmt.Fprintf(os.Stderr, "警告: %v，回退到子块展开\n", err)
+			} else if text != "" {
+				return text, nil
+			}
+		}
+
+		// 回退逻辑：如无可解析小组件内容或解析失败，按历史行为递归展开子块
 		if block.Children != nil {
 			var sb strings.Builder
 			for _, childID := range block.Children {
@@ -437,6 +449,76 @@ func (c *BlockToMarkdown) convertText(block *larkdocx.Block) (string, error) {
 		return "", nil
 	}
 	return c.convertTextElements(block.Text.Elements) + "\n", nil
+}
+
+func (c *BlockToMarkdown) convertAddOns(block *larkdocx.Block) (string, error) {
+	if block.AddOns == nil {
+		return "", nil
+	}
+
+	typeID := ""
+	if block.AddOns.ComponentTypeId != nil {
+		typeID = *block.AddOns.ComponentTypeId
+	}
+
+	componentID := ""
+	if block.AddOns.ComponentId != nil {
+		componentID = *block.AddOns.ComponentId
+	}
+
+	if block.AddOns.Record != nil {
+		var record struct {
+			Data  string `json:"data"`
+			View  string `json:"view"`
+			Theme string `json:"theme"`
+		}
+
+		raw := strings.TrimSpace(*block.AddOns.Record)
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &record); err != nil {
+				return fmt.Sprintf("[文本绘图组件 (%s) 源码解析失败]\n", componentID), fmt.Errorf("AddOns Record JSON 解析失败 (component: %s): %w", componentID, err)
+			}
+			source := strings.TrimSpace(record.Data)
+			if source != "" {
+				lang := detectAddonDiagramLanguage(record.View, source)
+				return fmt.Sprintf("```%s\n%s\n```\n", lang, source), nil
+			}
+		}
+	}
+
+	if typeID == ISVTypeTextDrawing {
+		return fmt.Sprintf("[文本绘图组件 (component: %s)]\n", componentID), nil
+	}
+
+	if componentID != "" {
+		return fmt.Sprintf("[小组件 (type: %s, component: %s)]\n", typeID, componentID), nil
+	}
+
+	if typeID != "" {
+		return fmt.Sprintf("[小组件 (type: %s)]\n", typeID), nil
+	}
+
+	return "", nil
+}
+
+func detectAddonDiagramLanguage(view string, source string) string {
+	normalized := strings.ToLower(strings.TrimSpace(view))
+	src := strings.TrimSpace(source)
+
+	if normalized == "" {
+		// HasPrefix 是 Contains 的子集，直接用 Contains 即可
+		if strings.Contains(src, "@startuml") {
+			return "plantuml"
+		}
+		return "mermaid"
+	}
+
+	if strings.Contains(normalized, "plantuml") {
+		return "plantuml"
+	}
+
+	// 典型飞书绘图 view 多为 mermaid 风格语法，统一归一为 mermaid
+	return "mermaid"
 }
 
 // getHeadingTextAndStyle 从 heading 块中提取 elements 和 TextStyle
@@ -1040,7 +1122,9 @@ func (c *BlockToMarkdown) convertISV(block *larkdocx.Block) (string, error) {
 
 	switch typeID {
 	case ISVTypeTextDrawing:
-		// TextDrawing 是 Mermaid 绘图块，Open API 不暴露源码
+		// ISV (block_type=28) 的 TextDrawing 不含 Record 字段，Open API 不暴露源码。
+		// 与 AddOns (block_type=40) 不同：AddOns 的 Record 字段包含完整的 Mermaid/PlantUML
+		// 源码（JSON 格式 {"data":"...","view":"..."}），可直接提取还原为代码块。
 		return fmt.Sprintf("```mermaid\n%%%% Feishu TextDrawing (component: %s)\n%%%% Mermaid source code is not accessible via Open API\n```\n", componentID), nil
 	case ISVTypeTimeline:
 		// Timeline 是时间线块，Open API 不暴露源数据
