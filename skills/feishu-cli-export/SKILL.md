@@ -399,6 +399,7 @@ feishu-cli doc import-file ~/Documents/report.docx --type docx --name "季度报
 
 ### 已知问题
 
-> **BUG（v1.7.0）**：`doc import-file` 存在 bug，文件上传成功但创建导入任务时报
-> `field validation failed`（API: POST /open-apis/drive/v1/import_tasks），即使使用合法的 .docx 文件也会失败。
-> 请使用 `feishu-cli doc import` (Markdown 导入) 作为替代方案。
+> **注意**：`doc import-file` 不提供 `--folder` 时会报 `field validation failed`
+> （API 的 mount point 为必填，但 CLI 标记为可选）。
+> **解决方法**：始终传入 `--folder` 参数指定目标文件夹 Token，例如：
+> `feishu-cli doc import-file report.docx --type docx --folder fldcnXXX`
