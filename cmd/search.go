@@ -39,7 +39,7 @@ var searchCmd = &cobra.Command{
   feishu-cli search docs "产品需求" --user-access-token <token>
 
   # 搜索特定类型的文档
-  feishu-cli search docs "季度报告" --doc-types doc,sheet --user-access-token <token>`,
+  feishu-cli search docs "季度报告" --doc-types DOC,SHEET --user-access-token <token>`,
 }
 
 func init() {

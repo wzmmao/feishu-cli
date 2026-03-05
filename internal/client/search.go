@@ -204,56 +204,60 @@ func SearchDocWiki(opts SearchDocWikiOptions, userAccessToken string) (*SearchDo
 	bodyBuilder := larksearch.NewSearchDocWikiReqBodyBuilder().
 		Query(opts.Query)
 
-	// 如果有文档类型过滤
-	if len(opts.DocTypes) > 0 || len(opts.FolderTokens) > 0 || len(opts.CreatorIDs) > 0 || opts.OnlyTitle != nil || opts.SortType != "" {
-		// 判断是否包含 wiki 类型
-		hasWiki := false
-		for _, dt := range opts.DocTypes {
-			if dt == "wiki" {
-				hasWiki = true
-				break
-			}
-		}
-
-		if hasWiki && len(opts.SpaceIDs) > 0 {
-			// 使用 WikiFilter
-			wikiFilterBuilder := larksearch.NewWikiFilterBuilder()
-			if len(opts.SpaceIDs) > 0 {
-				wikiFilterBuilder.SpaceIds(opts.SpaceIDs)
-			}
-			if len(opts.CreatorIDs) > 0 {
-				wikiFilterBuilder.CreatorIds(opts.CreatorIDs)
-			}
-			if len(opts.DocTypes) > 0 {
-				wikiFilterBuilder.DocTypes(opts.DocTypes)
-			}
-			if opts.OnlyTitle != nil {
-				wikiFilterBuilder.OnlyTitle(*opts.OnlyTitle)
-			}
-			if opts.SortType != "" {
-				wikiFilterBuilder.SortType(opts.SortType)
-			}
-			bodyBuilder.WikiFilter(wikiFilterBuilder.Build())
+	// 按类型拆分：wiki 类型走 WikiFilter，其余走 DocFilter，支持同时设置
+	var wikiTypes, docTypes []string
+	for _, dt := range opts.DocTypes {
+		if dt == "WIKI" {
+			wikiTypes = append(wikiTypes, dt)
 		} else {
-			// 使用 DocFilter
-			docFilterBuilder := larksearch.NewDocFilterBuilder()
-			if len(opts.DocTypes) > 0 {
-				docFilterBuilder.DocTypes(opts.DocTypes)
-			}
-			if len(opts.FolderTokens) > 0 {
-				docFilterBuilder.FolderTokens(opts.FolderTokens)
-			}
-			if len(opts.CreatorIDs) > 0 {
-				docFilterBuilder.CreatorIds(opts.CreatorIDs)
-			}
-			if opts.OnlyTitle != nil {
-				docFilterBuilder.OnlyTitle(*opts.OnlyTitle)
-			}
-			if opts.SortType != "" {
-				docFilterBuilder.SortType(opts.SortType)
-			}
-			bodyBuilder.DocFilter(docFilterBuilder.Build())
+			docTypes = append(docTypes, dt)
 		}
+	}
+
+	// 构建 DocFilter：有非 wiki 文档类型、有文件夹范围时需要；
+	// 仅指定了 wiki 类型时，通用筛选条件（创建者/标题/排序）只加到 WikiFilter
+	needDocFilter := len(docTypes) > 0 || len(opts.FolderTokens) > 0 ||
+		(len(wikiTypes) == 0 && (len(opts.CreatorIDs) > 0 || opts.OnlyTitle != nil || opts.SortType != ""))
+	if needDocFilter {
+		docFilterBuilder := larksearch.NewDocFilterBuilder()
+		if len(docTypes) > 0 {
+			docFilterBuilder.DocTypes(docTypes)
+		}
+		if len(opts.FolderTokens) > 0 {
+			docFilterBuilder.FolderTokens(opts.FolderTokens)
+		}
+		if len(opts.CreatorIDs) > 0 {
+			docFilterBuilder.CreatorIds(opts.CreatorIDs)
+		}
+		if opts.OnlyTitle != nil {
+			docFilterBuilder.OnlyTitle(*opts.OnlyTitle)
+		}
+		if opts.SortType != "" {
+			docFilterBuilder.SortType(opts.SortType)
+		}
+		bodyBuilder.DocFilter(docFilterBuilder.Build())
+	}
+
+	// 构建 WikiFilter（有 wiki 类型或有 space-ids）
+	needWikiFilter := len(wikiTypes) > 0 || len(opts.SpaceIDs) > 0
+	if needWikiFilter {
+		wikiFilterBuilder := larksearch.NewWikiFilterBuilder()
+		if len(opts.SpaceIDs) > 0 {
+			wikiFilterBuilder.SpaceIds(opts.SpaceIDs)
+		}
+		if len(opts.CreatorIDs) > 0 {
+			wikiFilterBuilder.CreatorIds(opts.CreatorIDs)
+		}
+		if len(wikiTypes) > 0 {
+			wikiFilterBuilder.DocTypes(wikiTypes)
+		}
+		if opts.OnlyTitle != nil {
+			wikiFilterBuilder.OnlyTitle(*opts.OnlyTitle)
+		}
+		if opts.SortType != "" {
+			wikiFilterBuilder.SortType(opts.SortType)
+		}
+		bodyBuilder.WikiFilter(wikiFilterBuilder.Build())
 	}
 
 	// 设置分页参数
