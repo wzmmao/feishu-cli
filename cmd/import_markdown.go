@@ -234,6 +234,20 @@ type tableResult struct {
 	err     error
 }
 
+// imageTask 表示一个待上传的图片任务
+type imageTask struct {
+	index   int    // 序号 (1-based)
+	source  string // 图片源（本地路径或 URL）
+	blockID string // 空 Image 块 ID
+}
+
+// imageResult 表示图片上传的结果
+type imageResult struct {
+	task    imageTask
+	success bool
+	err     error
+}
+
 // importStats 记录导入统计信息
 type importStats struct {
 	mu              sync.Mutex
@@ -246,7 +260,10 @@ type importStats struct {
 	tableTotal      int
 	tableSuccess    int
 	tableFailed     int
-	imageSkipped    int
+	imageTotal      int // 总图片数
+	imageSuccess    int // 上传成功
+	imageFailed     int // 上传失败
+	imageSkipped    int // 跳过（feishu:// 引用或上传未启用）
 	fallbackSuccess int
 	fallbackFailed  int
 	phase1Duration  time.Duration
@@ -285,6 +302,7 @@ var importMarkdownCmd = &cobra.Command{
 		diagramWorkers, _ := cmd.Flags().GetInt("diagram-workers")
 		tableWorkers, _ := cmd.Flags().GetInt("table-workers")
 		diagramRetries, _ := cmd.Flags().GetInt("diagram-retries")
+		imageWorkers, _ := cmd.Flags().GetInt("image-workers")
 
 		// 向后兼容: 如果用户使用了旧的 --mermaid-workers/--mermaid-retries，覆盖新值
 		if cmd.Flags().Changed("mermaid-workers") {
@@ -366,18 +384,19 @@ var importMarkdownCmd = &cobra.Command{
 		fmt.Println("=== 阶段 1/3: 创建文档块 ===")
 		phase1Start := time.Now()
 
-		dTasks, tTasks, err := phase1CreateBlocks(documentID, segments, uploadImages, basePath, stats, verbose)
+		dTasks, tTasks, iTasks, err := phase1CreateBlocks(documentID, segments, uploadImages, basePath, stats, verbose)
 		if err != nil {
 			return err
 		}
 
 		stats.phase1Duration = time.Since(phase1Start)
 		stats.tableTotal = len(tTasks)
-		fmt.Printf("[阶段1] 完成 (%.1fs), 块: %d, 待填表格: %d, 待导入图表: %d\n\n",
-			stats.phase1Duration.Seconds(), stats.totalBlocks, len(tTasks), len(dTasks))
+		stats.imageTotal = stats.imageSkipped + len(iTasks)
+		fmt.Printf("[阶段1] 完成 (%.1fs), 块: %d, 待填表格: %d, 待导入图表: %d, 待上传图片: %d\n\n",
+			stats.phase1Duration.Seconds(), stats.totalBlocks, len(tTasks), len(dTasks), len(iTasks))
 
 		// === 阶段 2/3: 并发处理 ===
-		if len(dTasks) > 0 || len(tTasks) > 0 {
+		if len(dTasks) > 0 || len(tTasks) > 0 || len(iTasks) > 0 {
 			// 阶段 1 大量 API 调用后等待配额恢复，避免阶段 2 立即触发频率限制
 			if stats.totalBlocks > 30 {
 				cooldown := 5 * time.Second
@@ -386,16 +405,22 @@ var importMarkdownCmd = &cobra.Command{
 				}
 				time.Sleep(cooldown)
 			}
-			fmt.Printf("=== 阶段 2/3: 并发处理 (图表×%d, 表格×%d) ===\n", diagramWorkers, tableWorkers)
+			fmt.Printf("=== 阶段 2/3: 并发处理 (图表×%d, 表格×%d, 图片×%d) ===\n", diagramWorkers, tableWorkers, imageWorkers)
 			phase2Start := time.Now()
 
-			failedDiagrams := phase2ConcurrentProcess(documentID, dTasks, tTasks, diagramWorkers, tableWorkers, diagramRetries, stats, verbose)
+			failedDiagrams := phase2ConcurrentProcess(documentID, dTasks, tTasks, iTasks, diagramWorkers, tableWorkers, imageWorkers, diagramRetries, basePath, stats, verbose)
 
 			stats.phase2Duration = time.Since(phase2Start)
-			fmt.Printf("[阶段2] 完成 (%.1fs), 图表: %d/%d, 表格: %d/%d\n\n",
+			imageUploadTotal := stats.imageTotal - stats.imageSkipped
+			var imageInfo string
+			if imageUploadTotal > 0 {
+				imageInfo = fmt.Sprintf(", 图片: %d/%d", stats.imageSuccess, imageUploadTotal)
+			}
+			fmt.Printf("[阶段2] 完成 (%.1fs), 图表: %d/%d, 表格: %d/%d%s\n\n",
 				stats.phase2Duration.Seconds(),
 				stats.diagramSuccess, stats.diagramTotal,
-				stats.tableSuccess, stats.tableTotal)
+				stats.tableSuccess, stats.tableTotal,
+				imageInfo)
 
 			// === 阶段 3/3: 降级处理 ===
 			if len(failedDiagrams) > 0 {
@@ -428,7 +453,10 @@ var importMarkdownCmd = &cobra.Command{
 				"table_total":      stats.tableTotal,
 				"table_success":    stats.tableSuccess,
 				"table_failed":     stats.tableFailed,
-				"image_skipped":    stats.imageSkipped,
+				"image_total":    stats.imageTotal,
+				"image_success":  stats.imageSuccess,
+				"image_failed":   stats.imageFailed,
+				"image_skipped":  stats.imageSkipped,
 				"duration_seconds": totalDuration.Seconds(),
 				"phase1_seconds":   stats.phase1Duration.Seconds(),
 				"phase2_seconds":   stats.phase2Duration.Seconds(),
@@ -440,8 +468,18 @@ var importMarkdownCmd = &cobra.Command{
 			fmt.Println("导入完成!")
 			fmt.Printf("  文档ID: %s\n", documentID)
 			fmt.Printf("  添加块数: %d\n", stats.totalBlocks)
-			if stats.imageSkipped > 0 {
-				fmt.Printf("  图片: %d 张 (已创建空占位块，飞书 API 暂不支持通过 Open API 插入图片)\n", stats.imageSkipped)
+			if stats.imageTotal > 0 {
+				if stats.imageSkipped == stats.imageTotal {
+					fmt.Printf("  图片: %d 张 (已创建占位块，feishu:// 引用需手动上传)\n", stats.imageSkipped)
+				} else if stats.imageFailed > 0 {
+					fmt.Printf("  图片: %d/%d 成功 (%d 跳过, %d 失败)\n",
+						stats.imageSuccess, stats.imageTotal, stats.imageSkipped, stats.imageFailed)
+				} else if stats.imageSkipped > 0 {
+					fmt.Printf("  图片: %d/%d 成功 (%d 跳过)\n",
+						stats.imageSuccess, stats.imageTotal, stats.imageSkipped)
+				} else {
+					fmt.Printf("  图片: %d/%d 成功\n", stats.imageSuccess, stats.imageTotal)
+				}
 			}
 			if stats.tableTotal > 0 {
 				fmt.Printf("  表格: %d/%d 成功\n", stats.tableSuccess, stats.tableTotal)
@@ -474,9 +512,10 @@ func phase1CreateBlocks(
 	basePath string,
 	stats *importStats,
 	verbose bool,
-) ([]diagramTask, []tableTask, error) {
+) ([]diagramTask, []tableTask, []imageTask, error) {
 	var dTasks []diagramTask
 	var tTasks []tableTask
+	var iTasks []imageTask
 	diagramIdx := 0
 
 	for segIdx, seg := range segments {
@@ -493,7 +532,7 @@ func phase1CreateBlocks(
 			conv := converter.NewMarkdownToBlock([]byte(seg.content), options, basePath)
 			result, err := conv.ConvertWithTableData()
 			if err != nil {
-				return nil, nil, fmt.Errorf("转换 Markdown 失败 (段落 %d): %w", segIdx+1, err)
+				return nil, nil, nil, fmt.Errorf("转换 Markdown 失败 (段落 %d): %w", segIdx+1, err)
 			}
 
 			// 累加图片跳过统计（飞书 API 不支持通过 Open API 插入图片，仅创建空占位块）
@@ -522,6 +561,14 @@ func phase1CreateBlocks(
 				}
 			}
 
+			// 记录 Image 块的索引（待上传）
+			var imageIndices []int
+			for i, block := range topLevelBlocks {
+				if block.BlockType != nil && *block.BlockType == int(converter.BlockTypeImage) {
+					imageIndices = append(imageIndices, i)
+				}
+			}
+
 			// 批量添加顶层块（飞书 API 限制每次最多 50 个块）
 			const batchSize = 50
 			var createdBlockIDs []string
@@ -540,7 +587,7 @@ func phase1CreateBlocks(
 					RetryOnRateLimit: true,
 				})
 				if createResult.Err != nil {
-					return nil, nil, fmt.Errorf("添加内容失败 (段落 %d): %w", segIdx+1, createResult.Err)
+					return nil, nil, nil, fmt.Errorf("添加内容失败 (段落 %d): %w", segIdx+1, createResult.Err)
 				}
 				stats.totalBlocks += len(createResult.Value)
 
@@ -633,6 +680,20 @@ func phase1CreateBlocks(
 				tableDataIdx++
 			}
 
+			// 收集图片上传任务
+			imageSourceIdx := 0
+			for _, imgIdx := range imageIndices {
+				if imgIdx >= len(createdBlockIDs) || imageSourceIdx >= len(result.ImageSources) {
+					continue
+				}
+				iTasks = append(iTasks, imageTask{
+					index:   len(iTasks) + 1,
+					source:  result.ImageSources[imageSourceIdx],
+					blockID: createdBlockIDs[imgIdx],
+				})
+				imageSourceIdx++
+			}
+
 		} else if seg.kind == "equation" {
 			// 块级公式：飞书 API 不支持创建 Equation 块（type=16），
 			// 降级为包含行内 Equation 元素的 Text 块，保留公式语义
@@ -703,7 +764,7 @@ func phase1CreateBlocks(
 		}
 	}
 
-	return dTasks, tTasks, nil
+	return dTasks, tTasks, iTasks, nil
 }
 
 // phase2ConcurrentProcess 并发处理图表导入和表格填充
@@ -711,9 +772,12 @@ func phase2ConcurrentProcess(
 	documentID string,
 	dTasks []diagramTask,
 	tTasks []tableTask,
+	iTasks []imageTask,
 	diagramWorkers int,
 	tableWorkers int,
+	imageWorkers int,
 	maxRetries int,
+	basePath string,
 	stats *importStats,
 	verbose bool,
 ) []diagramResult {
@@ -761,6 +825,27 @@ func phase2ConcurrentProcess(
 				stats.tableSuccess++
 			} else {
 				stats.tableFailed++
+			}
+			stats.mu.Unlock()
+		}(task)
+	}
+
+	// 启动图片工作
+	imageSem := make(chan struct{}, imageWorkers)
+	for _, task := range iTasks {
+		wg.Add(1)
+		go func(t imageTask) {
+			defer wg.Done()
+			imageSem <- struct{}{}
+			defer func() { <-imageSem }()
+
+			result := processImageTask(documentID, t, basePath, verbose)
+
+			stats.mu.Lock()
+			if result.success {
+				stats.imageSuccess++
+			} else {
+				stats.imageFailed++
 			}
 			stats.mu.Unlock()
 		}(task)
@@ -866,6 +951,92 @@ func processTableTask(documentID string, task tableTask, verbose bool) tableResu
 		syncPrintf("  ✓ 表格 %d 成功\n", task.index)
 	}
 	return tableResult{task: task, success: true}
+}
+
+// processImageTask 处理单个图片上传任务（下载+上传+绑定）
+func processImageTask(documentID string, task imageTask, basePath string, verbose bool) imageResult {
+	// 1. 解析图片源为本地文件
+	localPath, cleanup, err := resolveImageSource(task.source, basePath)
+	if err != nil {
+		syncPrintf("  ✗ 图片 %d 解析失败 (%s): %v\n", task.index, task.source, err)
+		return imageResult{task: task, success: false, err: err}
+	}
+	defer cleanup()
+
+	// 2. 上传图片（带 extra 路由参数）
+	extra := fmt.Sprintf(`{"drive_route_token":"%s"}`, documentID)
+
+	uploadResult := client.DoWithRetry(func() (string, http.Header, error) {
+		token, err := client.UploadMediaWithExtra(localPath, "docx_image", task.blockID, "", extra)
+		return token, nil, err
+	}, client.RetryConfig{
+		MaxRetries:       5,
+		RetryOnRateLimit: true,
+		OnRetry: func(attempt int, err error, wait time.Duration) {
+			if verbose {
+				syncPrintf("  ⚠ 图片 %d 上传重试 %d (等待 %.1fs): %v\n",
+					task.index, attempt, wait.Seconds(), err)
+			}
+		},
+	})
+	if uploadResult.Err != nil {
+		syncPrintf("  ✗ 图片 %d 上传失败: %v\n", task.index, uploadResult.Err)
+		return imageResult{task: task, success: false, err: uploadResult.Err}
+	}
+	fileToken := uploadResult.Value
+
+	// 3. 绑定图片到 Image 块（replace_image）
+	replaceResult := client.DoVoidWithRetry(func() (http.Header, error) {
+		return nil, client.UpdateBlock(documentID, task.blockID, map[string]any{
+			"replace_image": map[string]any{"token": fileToken},
+		})
+	}, client.RetryConfig{
+		MaxRetries:       3,
+		RetryOnRateLimit: true,
+	})
+	if replaceResult.Err != nil {
+		syncPrintf("  ✗ 图片 %d 绑定失败: %v\n", task.index, replaceResult.Err)
+		return imageResult{task: task, success: false, err: replaceResult.Err}
+	}
+
+	if verbose {
+		syncPrintf("  ✓ 图片 %d 成功\n", task.index)
+	}
+	return imageResult{task: task, success: true}
+}
+
+// resolveImageSource 解析图片源为本地文件路径
+// 返回本地路径和清理函数（外部 URL 下载的临时文件需要清理）
+func resolveImageSource(source, basePath string) (string, func(), error) {
+	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
+		// 外部 URL → 下载到临时文件
+		ext := filepath.Ext(source)
+		if ext == "" || len(ext) > 10 {
+			ext = ".png"
+		}
+		tmpFile, err := os.CreateTemp("", "feishu-img-*"+ext)
+		if err != nil {
+			return "", nil, fmt.Errorf("创建临时文件失败: %w", err)
+		}
+		tmpPath := tmpFile.Name()
+		tmpFile.Close()
+
+		if err := client.DownloadFromURL(source, tmpPath); err != nil {
+			os.Remove(tmpPath)
+			return "", nil, fmt.Errorf("下载图片失败: %w", err)
+		}
+		return tmpPath, func() { os.Remove(tmpPath) }, nil
+	}
+
+	// 本地文件
+	localPath := source
+	if !filepath.IsAbs(localPath) {
+		localPath = filepath.Join(basePath, localPath)
+	}
+	if _, err := os.Stat(localPath); err != nil {
+		return "", nil, fmt.Errorf("图片文件不存在: %s", localPath)
+	}
+	return localPath, func() {}, nil
 }
 
 // createNestedChildren 递归创建嵌套子块（如嵌套列表的父子关系）
@@ -1033,6 +1204,7 @@ func init() {
 	importMarkdownCmd.Flags().BoolP("verbose", "v", false, "显示详细进度")
 	importMarkdownCmd.Flags().Int("diagram-workers", 5, "图表 (Mermaid/PlantUML) 并发导入数")
 	importMarkdownCmd.Flags().Int("table-workers", 3, "表格并发填充数")
+	importMarkdownCmd.Flags().Int("image-workers", 3, "图片并发上传数")
 	importMarkdownCmd.Flags().Int("diagram-retries", 10, "图表最大重试次数")
 	// 向后兼容别名
 	importMarkdownCmd.Flags().Int("mermaid-workers", 5, "图表并发导入数 (--diagram-workers 别名)")

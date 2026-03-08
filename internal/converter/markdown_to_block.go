@@ -105,10 +105,11 @@ func calculateColumnWidths(headerContents []string, dataRows [][]string, cols in
 
 // MarkdownToBlock converts Markdown to Feishu blocks
 type MarkdownToBlock struct {
-	source     []byte
-	options    ConvertOptions
-	basePath   string // base path for resolving relative image paths
-	imageStats ImageStats
+	source       []byte
+	options      ConvertOptions
+	basePath     string // base path for resolving relative image paths
+	imageStats   ImageStats
+	imageSources []string // 待上传图片源（本地路径或 URL）
 }
 
 // NewMarkdownToBlock creates a new converter
@@ -144,9 +145,10 @@ func FlattenBlockNodes(nodes []*BlockNode) []*larkdocx.Block {
 
 // ConvertResult contains converted blocks and table data
 type ConvertResult struct {
-	BlockNodes []*BlockNode // 支持嵌套层级的块树
-	TableDatas []*TableData // Table data in order of appearance, used for filling content
-	ImageStats ImageStats   // 图片处理统计
+	BlockNodes   []*BlockNode // 支持嵌套层级的块树
+	TableDatas   []*TableData // Table data in order of appearance, used for filling content
+	ImageSources []string     // 待上传图片源（本地路径或 URL），与 Image 块一一对应
+	ImageStats   ImageStats   // 图片处理统计
 }
 
 // ConvertWithTableData converts Markdown to Feishu blocks and returns table data for content filling
@@ -238,6 +240,7 @@ func (c *MarkdownToBlock) ConvertWithTableData() (*ConvertResult, error) {
 	}
 
 	result.ImageStats = c.imageStats
+	result.ImageSources = c.imageSources
 	return result, nil
 }
 
@@ -991,12 +994,8 @@ func (c *MarkdownToBlock) convertImage(node *ast.Image) (*larkdocx.Block, error)
 		return c.createImagePlaceholder(dest), nil
 	}
 
-	// 飞书 Open API 限制：DocX 文档无法通过 API 插入带图片的 Image 块。
-	// Drive upload API 不支持 DocX block ID 作为 parent_node（返回 "parent node not exist"），
-	// 且 replace_image 在 token 通过 documentID 上传时返回 "relation mismatch"。
-	// 因此创建空 Image 块作为占位符，用户可在飞书网页端手动添加图片。
-	// 参考：https://github.com/cso1z/Feishu-MCP/issues/32
-	c.imageStats.Skipped++
+	// 创建空 Image 块，收集图片源用于 Phase 2 上传
+	c.imageSources = append(c.imageSources, dest)
 	blockType := int(BlockTypeImage)
 	return &larkdocx.Block{
 		BlockType: &blockType,
