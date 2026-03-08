@@ -29,9 +29,11 @@ var completeTaskCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		taskGuid := args[0]
 
-		task, err := client.CompleteTask(taskGuid)
+		task, err := client.CompleteTask(taskGuid, token)
 		if err != nil {
 			return err
 		}
@@ -57,4 +59,5 @@ var completeTaskCmd = &cobra.Command{
 func init() {
 	taskCmd.AddCommand(completeTaskCmd)
 	completeTaskCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	completeTaskCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }

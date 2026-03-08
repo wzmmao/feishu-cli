@@ -29,10 +29,11 @@ var deleteTaskCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		taskGuid := args[0]
 
-		err := client.DeleteTask(taskGuid)
-		if err != nil {
+		if err := client.DeleteTask(taskGuid, token); err != nil {
 			return err
 		}
 
@@ -57,4 +58,5 @@ var deleteTaskCmd = &cobra.Command{
 func init() {
 	taskCmd.AddCommand(deleteTaskCmd)
 	deleteTaskCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	deleteTaskCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }

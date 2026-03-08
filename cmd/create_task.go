@@ -42,6 +42,8 @@ var createTaskCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		summary, _ := cmd.Flags().GetString("summary")
 		description, _ := cmd.Flags().GetString("description")
 		dueStr, _ := cmd.Flags().GetString("due")
@@ -64,7 +66,7 @@ var createTaskCmd = &cobra.Command{
 			opts.DueTimestamp = dueTime.UnixMilli()
 		}
 
-		task, err := client.CreateTask(opts)
+		task, err := client.CreateTask(opts, token)
 		if err != nil {
 			return err
 		}
@@ -121,5 +123,6 @@ func init() {
 	createTaskCmd.Flags().String("origin-href", "", "任务来源链接")
 	createTaskCmd.Flags().String("origin-platform", "", "任务来源平台名称")
 	createTaskCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	createTaskCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 	mustMarkFlagRequired(createTaskCmd, "summary")
 }

@@ -42,6 +42,8 @@ var taskMemberAddCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		taskGuid := args[0]
 		membersStr, _ := cmd.Flags().GetString("members")
 		role, _ := cmd.Flags().GetString("role")
@@ -62,7 +64,7 @@ var taskMemberAddCmd = &cobra.Command{
 			return fmt.Errorf("成员列表不能为空")
 		}
 
-		if err := client.AddTaskMembers(taskGuid, memberIDs, role); err != nil {
+		if err := client.AddTaskMembers(taskGuid, memberIDs, role, token); err != nil {
 			return err
 		}
 
@@ -90,6 +92,8 @@ var taskMemberRemoveCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		taskGuid := args[0]
 		membersStr, _ := cmd.Flags().GetString("members")
 		role, _ := cmd.Flags().GetString("role")
@@ -110,7 +114,7 @@ var taskMemberRemoveCmd = &cobra.Command{
 			return fmt.Errorf("成员列表不能为空")
 		}
 
-		if err := client.RemoveTaskMembers(taskGuid, memberIDs, role); err != nil {
+		if err := client.RemoveTaskMembers(taskGuid, memberIDs, role, token); err != nil {
 			return err
 		}
 
@@ -132,10 +136,12 @@ func init() {
 	taskMemberCmd.AddCommand(taskMemberAddCmd)
 	taskMemberAddCmd.Flags().String("members", "", "成员 ID 列表，逗号分隔（必填）")
 	taskMemberAddCmd.Flags().String("role", "assignee", "角色: assignee/follower")
+	taskMemberAddCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 	mustMarkFlagRequired(taskMemberAddCmd, "members")
 
 	taskMemberCmd.AddCommand(taskMemberRemoveCmd)
 	taskMemberRemoveCmd.Flags().String("members", "", "成员 ID 列表，逗号分隔（必填）")
 	taskMemberRemoveCmd.Flags().String("role", "assignee", "角色: assignee/follower")
+	taskMemberRemoveCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 	mustMarkFlagRequired(taskMemberRemoveCmd, "members")
 }

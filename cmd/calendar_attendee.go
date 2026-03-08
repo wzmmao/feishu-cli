@@ -43,6 +43,8 @@ var calendarAttendeeAddCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		calendarID := args[0]
 		eventID := args[1]
 		userIDsStr, _ := cmd.Flags().GetString("user-ids")
@@ -78,7 +80,7 @@ var calendarAttendeeAddCmd = &cobra.Command{
 			}
 		}
 
-		if err := client.AddEventAttendees(calendarID, eventID, attendees); err != nil {
+		if err := client.AddEventAttendees(calendarID, eventID, attendees, token); err != nil {
 			return err
 		}
 
@@ -105,13 +107,15 @@ var calendarAttendeeListCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		calendarID := args[0]
 		eventID := args[1]
 		pageSize, _ := cmd.Flags().GetInt("page-size")
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		output, _ := cmd.Flags().GetString("output")
 
-		attendees, nextPageToken, hasMore, err := client.ListEventAttendees(calendarID, eventID, pageSize, pageToken)
+		attendees, nextPageToken, hasMore, err := client.ListEventAttendees(calendarID, eventID, pageSize, pageToken, token)
 		if err != nil {
 			return err
 		}
@@ -160,9 +164,11 @@ func init() {
 	calendarAttendeeCmd.AddCommand(calendarAttendeeAddCmd)
 	calendarAttendeeAddCmd.Flags().String("user-ids", "", "用户 ID 列表，逗号分隔")
 	calendarAttendeeAddCmd.Flags().String("chat-ids", "", "群 ID 列表，逗号分隔")
+	calendarAttendeeAddCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 
 	calendarAttendeeCmd.AddCommand(calendarAttendeeListCmd)
 	calendarAttendeeListCmd.Flags().Int("page-size", 0, "每页数量")
 	calendarAttendeeListCmd.Flags().String("page-token", "", "分页标记")
 	calendarAttendeeListCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	calendarAttendeeListCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }

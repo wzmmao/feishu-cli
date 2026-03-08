@@ -41,10 +41,12 @@ var tasklistCreateCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		name, _ := cmd.Flags().GetString("name")
 		output, _ := cmd.Flags().GetString("output")
 
-		tl, err := client.CreateTasklist(name)
+		tl, err := client.CreateTasklist(name, token)
 		if err != nil {
 			return err
 		}
@@ -78,10 +80,12 @@ var tasklistGetCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		tasklistGuid := args[0]
 		output, _ := cmd.Flags().GetString("output")
 
-		tl, err := client.GetTasklist(tasklistGuid)
+		tl, err := client.GetTasklist(tasklistGuid, token)
 		if err != nil {
 			return err
 		}
@@ -125,11 +129,13 @@ var tasklistListCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		pageSize, _ := cmd.Flags().GetInt("page-size")
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		output, _ := cmd.Flags().GetString("output")
 
-		lists, nextPageToken, hasMore, err := client.ListTasklists(pageSize, pageToken)
+		lists, nextPageToken, hasMore, err := client.ListTasklists(pageSize, pageToken, token)
 		if err != nil {
 			return err
 		}
@@ -178,9 +184,11 @@ var tasklistDeleteCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		tasklistGuid := args[0]
 
-		if err := client.DeleteTasklist(tasklistGuid); err != nil {
+		if err := client.DeleteTasklist(tasklistGuid, token); err != nil {
 			return err
 		}
 
@@ -195,15 +203,19 @@ func init() {
 	tasklistCmd.AddCommand(tasklistCreateCmd)
 	tasklistCreateCmd.Flags().StringP("name", "n", "", "清单名称（必填）")
 	tasklistCreateCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	tasklistCreateCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 	mustMarkFlagRequired(tasklistCreateCmd, "name")
 
 	tasklistCmd.AddCommand(tasklistGetCmd)
 	tasklistGetCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	tasklistGetCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 
 	tasklistCmd.AddCommand(tasklistListCmd)
 	tasklistListCmd.Flags().Int("page-size", 0, "每页数量")
 	tasklistListCmd.Flags().String("page-token", "", "分页标记")
 	tasklistListCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	tasklistListCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 
 	tasklistCmd.AddCommand(tasklistDeleteCmd)
+	tasklistDeleteCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }

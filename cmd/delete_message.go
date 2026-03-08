@@ -33,10 +33,11 @@ var deleteMessageCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		messageID := args[0]
 
-		err := client.DeleteMessage(messageID)
-		if err != nil {
+		if err := client.DeleteMessage(messageID, token); err != nil {
 			return err
 		}
 
@@ -60,4 +61,5 @@ var deleteMessageCmd = &cobra.Command{
 func init() {
 	msgCmd.AddCommand(deleteMessageCmd)
 	deleteMessageCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	deleteMessageCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }

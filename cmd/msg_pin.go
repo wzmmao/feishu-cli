@@ -24,9 +24,11 @@ var msgPinCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		messageID := args[0]
 
-		if err := client.PinMessage(messageID); err != nil {
+		if err := client.PinMessage(messageID, token); err != nil {
 			return err
 		}
 
@@ -53,9 +55,11 @@ var msgUnpinCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		messageID := args[0]
 
-		if err := client.UnpinMessage(messageID); err != nil {
+		if err := client.UnpinMessage(messageID, token); err != nil {
 			return err
 		}
 
@@ -86,13 +90,15 @@ var msgPinsCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		chatID, _ := cmd.Flags().GetString("chat-id")
 		startTime, _ := cmd.Flags().GetString("start-time")
 		endTime, _ := cmd.Flags().GetString("end-time")
 		pageSize, _ := cmd.Flags().GetInt("page-size")
 		pageToken, _ := cmd.Flags().GetString("page-token")
 
-		result, err := client.ListPins(chatID, startTime, endTime, pageToken, pageSize)
+		result, err := client.ListPins(chatID, startTime, endTime, pageToken, pageSize, token)
 		if err != nil {
 			return err
 		}
@@ -103,7 +109,10 @@ var msgPinsCmd = &cobra.Command{
 
 func init() {
 	msgCmd.AddCommand(msgPinCmd)
+	msgPinCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
+
 	msgCmd.AddCommand(msgUnpinCmd)
+	msgUnpinCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 
 	msgCmd.AddCommand(msgPinsCmd)
 	msgPinsCmd.Flags().String("chat-id", "", "群 ID")
@@ -111,5 +120,6 @@ func init() {
 	msgPinsCmd.Flags().String("end-time", "", "结束时间（毫秒级时间戳）")
 	msgPinsCmd.Flags().Int("page-size", 0, "每页数量")
 	msgPinsCmd.Flags().String("page-token", "", "分页标记")
+	msgPinsCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 	mustMarkFlagRequired(msgPinsCmd, "chat-id")
 }

@@ -29,9 +29,11 @@ var getMessageCmd = &cobra.Command{
 			return err
 		}
 
+		token := resolveOptionalUserToken(cmd)
+
 		messageID := args[0]
 
-		result, err := client.GetMessage(messageID)
+		result, err := client.GetMessage(messageID, token)
 		if err != nil {
 			return err
 		}
@@ -95,4 +97,5 @@ var getMessageCmd = &cobra.Command{
 func init() {
 	msgCmd.AddCommand(getMessageCmd)
 	getMessageCmd.Flags().StringP("output", "o", "", "输出格式（json）")
+	getMessageCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }
