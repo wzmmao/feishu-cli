@@ -11,7 +11,7 @@
 3. **命令行参数**：`--user-access-token <token>`
 4. **环境变量**：`FEISHU_USER_ACCESS_TOKEN=<token>`
 
-Token 有效期约 2 小时，Refresh Token 有效期 30 天。**始终使用最大 scope 范围登录**，一次性覆盖搜索 + wiki + 日历 + 任务等全部功能。详见 `feishu-cli-auth` 技能。
+Token 有效期约 2 小时，Refresh Token 有效期 30 天（需 `offline_access` scope）。搜索命令通过 `resolveRequiredUserToken` 自动从 `token.json` 加载 Token；wiki、日历、任务等命令默认使用 App Token，仅在显式传 `--user-access-token` 时使用用户身份。详见 `feishu-cli-auth` 技能。
 
 ## 搜索消息
 

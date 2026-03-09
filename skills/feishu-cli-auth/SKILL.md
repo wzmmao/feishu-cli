@@ -106,9 +106,13 @@ scope 决定了 Token 能访问哪些 API。登录时通过 `--scopes` 指定（
 offline_access search:docs:read search:message search:app wiki:wiki:readonly calendar:calendar:read calendar:calendar.event:read calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:reply calendar:calendar.free_busy:read task:task:read task:task:write task:tasklist:read task:tasklist:write im:message:readonly contact:user.base:readonly drive:drive.metadata:readonly
 ```
 
-### 为什么用最大 scope
+### Token 使用策略
 
-feishu-cli 的 wiki、calendar、task、msg 等命令通过 `resolveOptionalUserToken` 支持可选的用户身份。当 token.json 存在时，这些命令会**自动使用 User Access Token**。如果 Token 的 scope 不包含对应权限，API 会返回 99991679 错误（不会回退到应用身份）。一次性授权所有 scope 可以彻底避免此问题。
+feishu-cli 的 wiki、calendar、task、msg 等命令通过 `resolveOptionalUserToken` 支持可选的用户身份。这些命令**默认使用 App Token（租户身份）**，不会自动从 token.json 加载 User Token。只有在以下情况才使用 User Token：
+- 通过 `--user-access-token` 参数显式传入
+- 通过 `FEISHU_USER_ACCESS_TOKEN` 环境变量显式设置
+
+搜索命令（`search docs/messages/apps`）通过 `resolveRequiredUserToken` **必须**使用 User Token，会从 token.json 自动加载。
 
 ### Scope 完整说明
 
@@ -191,7 +195,7 @@ scope 中无目标权限         → 需要重新登录并补充 scope
 
 ## Token 自动刷新机制
 
-每次执行需要 User Access Token 的命令时，`ResolveUserAccessToken()` 按以下优先级链查找：
+搜索等**必须** User Access Token 的命令（`resolveRequiredUserToken`）通过 `ResolveUserAccessToken()` 按以下优先级链查找。其他可选命令（`resolveOptionalUserToken`）仅检查第 1、2 项，默认使用 App Token：
 
 1. `--user-access-token` 命令行参数
 2. `FEISHU_USER_ACCESS_TOKEN` 环境变量
@@ -218,7 +222,7 @@ scope 中无目标权限         → 需要重新登录并补充 scope
 
 ### 可选 User Access Token 的命令
 
-以下命令通过 `resolveOptionalUserToken` 支持可选的用户身份——有 Token 时用用户身份获取更多结果，无 Token 时回退到应用身份。**但如果 Token 存在而 scope 不足，API 会直接报错而不会回退**：
+以下命令通过 `resolveOptionalUserToken` 支持可选的用户身份——**默认使用 App Token（租户身份）**，仅在通过 `--user-access-token` 参数或 `FEISHU_USER_ACCESS_TOKEN` 环境变量显式指定时才使用 User Token：
 
 | 命令类别 | 需要的 scope |
 |---------|-------------|
@@ -240,8 +244,9 @@ feishu-cli auth login --print-url --scopes "offline_access search:docs:read sear
 # ... 用户授权 ...
 feishu-cli auth callback "<回调URL>" --state "<state>"
 
-# 3. 登录后所有命令自动从 token.json 读取 Token
+# 3. 登录后搜索命令自动从 token.json 读取 Token
 feishu-cli search docs "产品需求"
+# 其他命令默认使用 App Token，需要时可显式传 --user-access-token
 feishu-cli wiki export <node_token> -o doc.md
 feishu-cli task create --summary "待办事项"
 ```

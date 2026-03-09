@@ -109,11 +109,14 @@ app_secret: "xxx"
 
 **流程**：`auth login` → 浏览器授权 → 回调获取 code → 换取 Token → 保存到 `~/.feishu-cli/token.json`
 
-**Token 优先级链**（`ResolveUserAccessToken`）：
-1. `--user-access-token` 命令行参数
-2. `FEISHU_USER_ACCESS_TOKEN` 环境变量
-3. `~/.feishu-cli/token.json`（access_token 有效直接返回；过期则用 refresh_token 自动刷新）
-4. `config.yaml` 中的 `user_access_token` 静态配置
+**Token 使用策略**：
+- **默认使用 App Token**（租户身份）：wiki、msg、calendar、task 等 55+ 个命令默认通过 `resolveOptionalUserToken` 使用 App Token，不会自动从 token.json 加载 User Token
+- **显式使用 User Token**：通过 `--user-access-token` 参数或 `FEISHU_USER_ACCESS_TOKEN` 环境变量可覆盖为用户身份
+- **必须 User Token**：搜索命令（`search docs/messages/apps`）通过 `resolveRequiredUserToken` 走完整优先级链：
+  1. `--user-access-token` 命令行参数
+  2. `FEISHU_USER_ACCESS_TOKEN` 环境变量
+  3. `~/.feishu-cli/token.json`（access_token 有效直接返回；过期则用 refresh_token 自动刷新）
+  4. `config.yaml` 中的 `user_access_token` 静态配置
 
 **前置条件**：在飞书开放平台 → 应用详情 → 安全设置 → 重定向 URL 中添加 `http://127.0.0.1:9768/callback`
 

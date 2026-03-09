@@ -13,16 +13,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resolveOptionalUserToken 尝试解析 user_access_token（可选）
-// 有 token 时使用用户身份，无 token 时回退到应用身份（tenant token）
+// resolveOptionalUserToken 解析显式指定的 user_access_token（可选）
+// 仅检查 --user-access-token 参数和 FEISHU_USER_ACCESS_TOKEN 环境变量，
+// 不自动从 token.json 加载，确保能用 App Token 的 API 默认使用 App Token（租户身份）
 func resolveOptionalUserToken(cmd *cobra.Command) string {
-	flagToken, _ := cmd.Flags().GetString("user-access-token")
-	cfg := config.Get()
-	token, err := auth.ResolveUserAccessToken(flagToken, cfg.UserAccessToken, cfg.AppID, cfg.AppSecret, cfg.BaseURL)
-	if err != nil && cfg.Debug {
-		fmt.Fprintf(os.Stderr, "[提示] 未找到 User Access Token，将使用应用身份访问。可通过 feishu-cli auth login 获取用户授权\n")
+	if flagToken, _ := cmd.Flags().GetString("user-access-token"); flagToken != "" {
+		return flagToken
 	}
-	return token
+	if envToken := os.Getenv("FEISHU_USER_ACCESS_TOKEN"); envToken != "" {
+		return envToken
+	}
+	return ""
 }
 
 // resolveRequiredUserToken 解析 user_access_token（必需）
