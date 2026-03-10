@@ -565,7 +565,7 @@ Claude 发送消息时按以下流程操作：
 |------|------|
 | `im:message` | 消息读写 |
 | `im:message:send_as_bot` | 以机器人身份发送消息 |
-| `im:chat:readonly` | 搜索群聊 |
+| `im:chat:read` | 搜索群聊 |
 | `im:message:readonly` | 获取历史消息 |
 
 ## 注意事项

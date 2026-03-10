@@ -3,6 +3,12 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+
+	"github.com/riba2534/feishu-cli/internal/config"
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
@@ -162,8 +168,17 @@ type ListMessagesResult struct {
 	HasMore   bool
 }
 
-// ListMessages lists messages in a container (chat)
+// ListMessages lists messages in a container (chat).
+// Note: The Feishu Go SDK (v3.5.3) incorrectly declares the List Messages API as
+// tenant_access_token only, but the API actually supports user_access_token as well.
+// When a user access token is provided, we use a raw HTTP request to bypass the SDK's
+// client-side token type validation. See: https://open.feishu.cn/document/server-docs/im-v1/message/list
 func ListMessages(containerID string, opts ListMessagesOptions, userAccessToken string) (*ListMessagesResult, error) {
+	// When user access token is provided, use raw HTTP to bypass SDK token type restriction
+	if userAccessToken != "" {
+		return listMessagesWithUserToken(containerID, opts, userAccessToken)
+	}
+
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -189,12 +204,86 @@ func ListMessages(containerID string, opts ListMessagesOptions, userAccessToken 
 		reqBuilder.PageToken(opts.PageToken)
 	}
 
-	resp, err := client.Im.Message.List(Context(), reqBuilder.Build(), UserTokenOption(userAccessToken)...)
+	resp, err := client.Im.Message.List(Context(), reqBuilder.Build())
 	if err != nil {
 		return nil, fmt.Errorf("获取消息列表失败: %w", err)
 	}
 
 	if !resp.Success() {
+		return nil, fmt.Errorf("获取消息列表失败: code=%d, msg=%s", resp.Code, resp.Msg)
+	}
+
+	return &ListMessagesResult{
+		Items:     resp.Data.Items,
+		PageToken: StringVal(resp.Data.PageToken),
+		HasMore:   BoolVal(resp.Data.HasMore),
+	}, nil
+}
+
+// listMessagesRawResponse represents the raw API response for list messages
+type listMessagesRawResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		Items     []*larkim.Message `json:"items"`
+		HasMore   *bool             `json:"has_more"`
+		PageToken *string           `json:"page_token"`
+	} `json:"data"`
+}
+
+// listMessagesWithUserToken calls the List Messages API directly via HTTP,
+// bypassing the SDK's token type validation that incorrectly rejects user_access_token.
+func listMessagesWithUserToken(containerID string, opts ListMessagesOptions, userAccessToken string) (*ListMessagesResult, error) {
+	cfg := config.Get()
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "https://open.feishu.cn"
+	}
+
+	params := url.Values{}
+	params.Set("container_id_type", opts.ContainerIDType)
+	params.Set("container_id", containerID)
+	if opts.StartTime != "" {
+		params.Set("start_time", opts.StartTime)
+	}
+	if opts.EndTime != "" {
+		params.Set("end_time", opts.EndTime)
+	}
+	if opts.SortType != "" {
+		params.Set("sort_type", opts.SortType)
+	}
+	if opts.PageSize > 0 {
+		params.Set("page_size", strconv.Itoa(opts.PageSize))
+	}
+	if opts.PageToken != "" {
+		params.Set("page_token", opts.PageToken)
+	}
+
+	reqURL := fmt.Sprintf("%s/open-apis/im/v1/messages?%s", baseURL, params.Encode())
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("获取消息列表失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+userAccessToken)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	httpResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("获取消息列表失败: %w", err)
+	}
+	defer httpResp.Body.Close()
+
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("获取消息列表失败: 读取响应失败: %w", err)
+	}
+
+	var resp listMessagesRawResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("获取消息列表失败: 解析响应失败: %w", err)
+	}
+
+	if resp.Code != 0 {
 		return nil, fmt.Errorf("获取消息列表失败: code=%d, msg=%s", resp.Code, resp.Msg)
 	}
 
