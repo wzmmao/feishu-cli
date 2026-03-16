@@ -278,11 +278,11 @@ func TestDeviceFlowHelpers(t *testing.T) {
 		}
 	})
 
-	t.Run("deviceFlowMin", func(t *testing.T) {
-		if got := deviceFlowMin(3, 5); got != 3 {
+	t.Run("min", func(t *testing.T) {
+		if got := min(3, 5); got != 3 {
 			t.Errorf("min(3,5) = %d, want 3", got)
 		}
-		if got := deviceFlowMin(7, 5); got != 5 {
+		if got := min(7, 5); got != 5 {
 			t.Errorf("min(7,5) = %d, want 5", got)
 		}
 	})

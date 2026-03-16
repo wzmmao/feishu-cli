@@ -9,11 +9,6 @@ var authCmd = &cobra.Command{
 	Short: "用户授权管理",
 	Long: `管理 OAuth 2.0 用户授权，用于获取 User Access Token。
 
-子命令:
-  login    登录授权（支持 Authorization Code Flow 和 Device Flow）
-  status   查看当前授权状态
-  logout   退出登录（清除本地 token）
-
 搜索功能（search messages/docs/apps）需要 User Access Token。
 
 示例:

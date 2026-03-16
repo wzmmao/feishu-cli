@@ -24,7 +24,6 @@ Authorization Code Flow（默认）:
 Device Flow（--device，RFC 8628）:
   无需配置重定向 URL，适合 CI/CD、无头服务器、容器等环境。
   终端显示用户码，用户在任意浏览器打开链接输入用户码完成授权，命令自动轮询等待结果。
-  · 仅获取设备码 JSON（--print-code）: 不轮询，供脚本调用。
 
 Token 保存位置: ~/.feishu-cli/token.json
 
@@ -44,13 +43,7 @@ Authorization Code Flow 前置条件:
   feishu-cli auth callback "<回调URL>" --state "<state>"
 
   # Device Flow（无需重定向 URL）
-  feishu-cli auth login --device
-
-  # Device Flow 指定 scope
-  feishu-cli auth login --device --scopes "search:docs:read offline_access"
-
-  # 仅获取设备码 JSON，不轮询
-  feishu-cli auth login --device --print-code`,
+  feishu-cli auth login --device`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := config.Validate(); err != nil {
 			return err
@@ -60,9 +53,9 @@ Authorization Code Flow 前置条件:
 		scopes, _ := cmd.Flags().GetString("scopes")
 		device, _ := cmd.Flags().GetBool("device")
 
-		// Device Flow 分支
+		// Device Flow 分支（不使用 --scopes，服务端自动授予默认权限）
 		if device {
-			return runDeviceFlow(cmd, cfg.AppID, cfg.AppSecret, cfg.BaseURL, scopes)
+			return runDeviceFlow(cfg.AppID, cfg.AppSecret, cfg.BaseURL)
 		}
 
 		// Authorization Code Flow
@@ -100,17 +93,10 @@ Authorization Code Flow 前置条件:
 }
 
 // runDeviceFlow 执行 Device Flow 授权（RFC 8628）
-func runDeviceFlow(cmd *cobra.Command, appID, appSecret, baseURL, scopes string) error {
-	printCode, _ := cmd.Flags().GetBool("print-code")
-
-	deviceResp, err := auth.RequestDeviceAuthorization(appID, appSecret, baseURL, scopes)
+func runDeviceFlow(appID, appSecret, baseURL string) error {
+	deviceResp, err := auth.RequestDeviceAuthorization(appID, appSecret, baseURL, "")
 	if err != nil {
 		return err
-	}
-
-	// --print-code 模式：仅输出 JSON，不轮询
-	if printCode {
-		return printJSON(deviceResp)
 	}
 
 	fmt.Fprintln(os.Stderr, "\n请在浏览器中完成以下操作:")
@@ -191,5 +177,4 @@ func init() {
 	authLoginCmd.Flags().Bool("print-url", false, "仅输出授权 URL 和 state（Authorization Code Flow 非交互模式）")
 	authLoginCmd.Flags().String("scopes", "", "请求的 OAuth scope（空格分隔，如 \"search:docs:read offline_access\"）")
 	authLoginCmd.Flags().Bool("device", false, "使用 Device Flow（RFC 8628），无需配置重定向 URL")
-	authLoginCmd.Flags().Bool("print-code", false, "仅输出设备码 JSON，不轮询（与 --device 配合使用）")
 }
