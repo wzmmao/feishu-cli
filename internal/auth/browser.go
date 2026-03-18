@@ -24,6 +24,14 @@ func openBrowser(url string) error {
 	return nil
 }
 
+// TryOpenBrowser 尝试打开浏览器（仅本地桌面环境有效，失败时静默忽略）
+func TryOpenBrowser(url string) error {
+	if !isLocalEnvironment() {
+		return nil
+	}
+	return openBrowser(url)
+}
+
 // isLocalEnvironment 检测是否为本地桌面环境
 func isLocalEnvironment() bool {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
