@@ -40,7 +40,10 @@ var listMessagesCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		containerID, _ := cmd.Flags().GetString("container-id")
 		containerIDType, _ := cmd.Flags().GetString("container-id-type")
@@ -60,8 +63,27 @@ var listMessagesCmd = &cobra.Command{
 		}
 
 		result, err := client.ListMessages(containerID, opts, token)
-		if err != nil {
+
+		// 降级判断：有 User Token 时，list API 失败或返回空结果都尝试 search+get
+		needFallback := false
+		if err != nil && token != "" {
+			needFallback = true
+		} else if err != nil {
 			return err
+		} else if token != "" && len(result.Items) == 0 && result.HasMore {
+			needFallback = true
+		}
+
+		if needFallback {
+			fmt.Fprintf(cmd.ErrOrStderr(), "[提示] bot 不在此群中，通过搜索方式获取消息...\n")
+			fallbackResult, fallbackErr := listMessagesViaSearch(containerID, pageSize, pageToken, token)
+			if fallbackErr != nil {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("搜索降级失败: %w", fallbackErr)
+			}
+			result = fallbackResult
 		}
 
 		output, _ := cmd.Flags().GetString("output")

@@ -34,6 +34,10 @@ var chatUpdateCmd = &cobra.Command{
 			return err
 		}
 
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 		chatID := args[0]
 		name, _ := cmd.Flags().GetString("name")
 		description, _ := cmd.Flags().GetString("description")
@@ -43,7 +47,7 @@ var chatUpdateCmd = &cobra.Command{
 			return fmt.Errorf("至少需要指定 --name、--description 或 --owner-id 中的一个")
 		}
 
-		if err := client.UpdateChat(chatID, name, description, ownerID); err != nil {
+		if err := client.UpdateChat(chatID, name, description, ownerID, token); err != nil {
 			return err
 		}
 
@@ -59,4 +63,5 @@ func init() {
 	chatUpdateCmd.Flags().String("name", "", "新群名称")
 	chatUpdateCmd.Flags().String("description", "", "新群描述")
 	chatUpdateCmd.Flags().String("owner-id", "", "新群主 ID")
+	chatUpdateCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }

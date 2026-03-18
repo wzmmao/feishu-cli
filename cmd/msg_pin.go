@@ -24,7 +24,10 @@ var msgPinCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		messageID := args[0]
 
@@ -55,7 +58,10 @@ var msgUnpinCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		messageID := args[0]
 
@@ -90,7 +96,10 @@ var msgPinsCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		chatID, _ := cmd.Flags().GetString("chat-id")
 		startTime, _ := cmd.Flags().GetString("start-time")

@@ -51,7 +51,10 @@ var msgReactionAddCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		messageID := args[0]
 		emojiType, _ := cmd.Flags().GetString("emoji-type")
@@ -85,7 +88,10 @@ var msgReactionRemoveCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		messageID := args[0]
 		reactionID, _ := cmd.Flags().GetString("reaction-id")
@@ -120,7 +126,10 @@ var msgReactionListCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		messageID := args[0]
 		emojiType, _ := cmd.Flags().GetString("emoji-type")

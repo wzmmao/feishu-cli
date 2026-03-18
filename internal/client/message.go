@@ -301,7 +301,14 @@ type GetMessageResult struct {
 }
 
 // GetMessage gets a message by message ID
+// Note: The SDK incorrectly declares this API as tenant_access_token only,
+// but it actually supports user_access_token. When a user token is provided,
+// we use raw HTTP to bypass the SDK's client-side token type validation.
 func GetMessage(messageID string, userAccessToken string) (*GetMessageResult, error) {
+	if userAccessToken != "" {
+		return getMessageWithUserToken(messageID, userAccessToken)
+	}
+
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -311,12 +318,58 @@ func GetMessage(messageID string, userAccessToken string) (*GetMessageResult, er
 		MessageId(messageID).
 		Build()
 
-	resp, err := client.Im.Message.Get(Context(), req, UserTokenOption(userAccessToken)...)
+	resp, err := client.Im.Message.Get(Context(), req)
 	if err != nil {
 		return nil, fmt.Errorf("获取消息详情失败: %w", err)
 	}
 
 	if !resp.Success() {
+		return nil, fmt.Errorf("获取消息详情失败: code=%d, msg=%s", resp.Code, resp.Msg)
+	}
+
+	if len(resp.Data.Items) == 0 {
+		return nil, fmt.Errorf("消息不存在")
+	}
+
+	return &GetMessageResult{
+		Message: resp.Data.Items[0],
+	}, nil
+}
+
+// getMessageWithUserToken calls the Get Message API via raw HTTP,
+// bypassing the SDK's token type validation.
+func getMessageWithUserToken(messageID string, userAccessToken string) (*GetMessageResult, error) {
+	cfg := config.Get()
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "https://open.feishu.cn"
+	}
+
+	reqURL := fmt.Sprintf("%s/open-apis/im/v1/messages/%s", baseURL, messageID)
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("获取消息详情失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+userAccessToken)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	httpResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("获取消息详情失败: %w", err)
+	}
+	defer httpResp.Body.Close()
+
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("获取消息详情失败: 读取响应失败: %w", err)
+	}
+
+	var resp listMessagesRawResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("获取消息详情失败: 解析响应失败: %w", err)
+	}
+
+	if resp.Code != 0 {
 		return nil, fmt.Errorf("获取消息详情失败: code=%d, msg=%s", resp.Code, resp.Msg)
 	}
 

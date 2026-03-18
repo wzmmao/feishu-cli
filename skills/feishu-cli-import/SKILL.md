@@ -36,7 +36,7 @@ allowed-tools: Bash, Read
 
 ## 前置条件
 
-- 已安装 feishu-cli 并完成认证（`feishu-cli auth login`，建议包含 `offline_access` scope）
+- 已安装 feishu-cli 并配置 App Token（`FEISHU_APP_ID` + `FEISHU_APP_SECRET`），无需 `auth login`
 - Markdown 文件使用 UTF-8 编码
 
 ## 使用方法

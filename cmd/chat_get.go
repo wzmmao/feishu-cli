@@ -22,9 +22,13 @@ var chatGetCmd = &cobra.Command{
 			return err
 		}
 
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 		chatID := args[0]
 
-		data, err := client.GetChat(chatID)
+		data, err := client.GetChat(chatID, token)
 		if err != nil {
 			return err
 		}
@@ -35,4 +39,5 @@ var chatGetCmd = &cobra.Command{
 
 func init() {
 	chatCmd.AddCommand(chatGetCmd)
+	chatGetCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }

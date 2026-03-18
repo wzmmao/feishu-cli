@@ -37,7 +37,10 @@ var searchChatsCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		userIDType, _ := cmd.Flags().GetString("user-id-type")
 		query, _ := cmd.Flags().GetString("query")

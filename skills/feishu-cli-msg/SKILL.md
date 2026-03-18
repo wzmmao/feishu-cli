@@ -1,18 +1,23 @@
 ---
 name: feishu-cli-msg
 description: >-
-  飞书消息全功能管理。发送消息（text/post/interactive 卡片等 11 种类型）、回复消息、
-  转发/合并转发、Reaction 表情回应、Pin 置顶消息、删除消息、消息详情、会话历史、
-  搜索群聊。当用户请求"发消息"、"回复"、"转发"、"置顶"、"Reaction"、"表情回应"、
-  "消息历史"、"Pin 消息"时使用。
+  飞书消息发送。发送消息（text/post/interactive 卡片等 11 种类型）、回复消息、
+  转发/合并转发。使用 App Token（Bot 身份），无需登录。
+  当用户请求"发消息"、"回复"、"转发"、"合并转发"、"发通知"、"发卡片"、
+  "给某人发飞书消息"、"通知某人"时使用，即使没有明确说"发送"，
+  只要意图是把信息传达给某人，都应使用此技能。
+  注意：Reaction/Pin/删除/获取消息详情/消息历史/搜索群聊/群聊管理
+  请使用 feishu-cli-chat 技能（需 User Token）。
 argument-hint: <receive_id> [--msg-type <type>]
 user-invocable: true
 allowed-tools: Bash, Read, Write
 ---
 
-# 飞书消息发送技能
+# 飞书消息发送与互动技能
 
-通过 feishu-cli 发送飞书消息，支持多种消息类型和丰富的消息管理操作。
+通过 feishu-cli 发送飞书消息、回复、转发、Reaction、Pin 等互动操作。
+
+> **查看聊天记录？** 请使用 **feishu-cli-chat** 技能（msg history/list/get/search-chats/群管理）。本技能专注于消息的发送与互动操作。
 
 ## 核心概念
 
@@ -73,45 +78,11 @@ allowed-tools: Bash, Read, Write
 | share_user | 个人名片 | `{"user_id":"ou_xxx"}` | — |
 | system | 系统分割线 | `{"type":"divider",...}` | 仅 p2p |
 
-## Bot 身份 vs User 身份
+## 身份说明
 
-feishu-cli 默认使用 **Bot（应用）身份** 调用 API。部分场景下 Bot 身份能力受限，需要切换为 **User（用户）身份**。
+本技能所有命令使用 **App Token（Bot 身份）**，无需登录。
 
-### 何时需要 User 身份
-
-| 场景 | Bot 身份 | User 身份 |
-|------|---------|----------|
-| 搜索群聊（Bot 在群内） | ✅ 可用 | ✅ 可用 |
-| 搜索群聊（Bot 不在群内） | ❌ 搜不到 | ✅ 可搜到用户所在的群 |
-| 获取消息（Bot 在群内） | ✅ 可用 | ✅ 可用 |
-| 获取消息（Bot 不在群内） | ❌ 报错 230002 | ✅ 可用（用户在群内即可） |
-| 搜索消息（群聊） | ❌ 不支持 | ✅ `--chat-type group_chat` |
-| 搜索消息（私聊） | ❌ 不支持 | ✅ `--chat-type p2p_chat` |
-| 搜索 p2p 会话 | ❌ search-chats 不支持 | ❌ search-chats 不支持（用 `search messages --chat-type p2p_chat` 替代） |
-
-### 如何切换为 User 身份
-
-在命令中添加 `--user-access-token` 参数。Token 从 `~/.feishu-cli/token.json` 获取（通过 `feishu-cli auth login` 登录后自动保存）：
-
-```bash
-# 获取 token（通过 shell 变量简化使用）
-UAT=$(python3 -c "import json; print(json.load(open('$HOME/.feishu-cli/token.json'))['access_token'])")
-
-# 在任何命令中添加 --user-access-token 即可切换身份
-feishu-cli msg search-chats --query "群名" --user-access-token "$UAT"
-feishu-cli msg list --container-id oc_xxx --container-id-type chat --user-access-token "$UAT"
-feishu-cli msg get om_xxx --user-access-token "$UAT"
-```
-
-### 查看群消息的推荐流程
-
-```
-1. 先用 Bot 身份 search-chats（快，无额外依赖）
-2. 搜不到？ → 加 --user-access-token 切换 User 身份重试
-3. 拿到 chat_id 后，用同样的身份 msg list 获取消息
-```
-
-**注意**：`search-chats` 使用 Bot 身份时调用 List API（只返回 Bot 所在的群），使用 User 身份时调用 Search API（可搜到用户所在的群和公开群），结果范围不同。
+> **Reaction/Pin/删除/获取消息/搜索群聊？** 这些操作需要 User Token，已移至 **feishu-cli-chat** 技能（需先 `auth login`）。
 
 ## 发送命令
 
@@ -478,51 +449,18 @@ feishu-cli msg merge-forward \
 | `--receive-id-type` | 接收者类型 | `email` |
 | `--message-ids` | 消息 ID 列表（逗号分隔） | 必填 |
 
-## Reaction 表情回应
+## Reaction / Pin / 删除消息
 
-给消息添加/删除/查询表情回应。
-
-```bash
-# 添加表情
-feishu-cli msg reaction add <message_id> --emoji-type THUMBSUP
-
-# 删除表情
-feishu-cli msg reaction remove <message_id> --reaction-id <REACTION_ID>
-
-# 查询表情列表
-feishu-cli msg reaction list <message_id> [--emoji-type THUMBSUP] [--page-size 20]
-```
-
-常用 emoji-type：`THUMBSUP`（点赞）、`SMILE`（微笑）、`LAUGH`（大笑）、`HEART`（爱心）、`JIAYI`（加一）、`OK`、`FIRE`
-
-## Pin 置顶消息
-
-```bash
-# 置顶消息
-feishu-cli msg pin <message_id>
-
-# 取消置顶
-feishu-cli msg unpin <message_id>
-
-# 获取群内置顶消息列表
-feishu-cli msg pins --chat-id <chat_id> [--start-time <ms_timestamp>] [--end-time <ms_timestamp>]
-```
-
-`--start-time` 和 `--end-time` 使用**毫秒级**时间戳。
+> 这些命令需要 **User Token**，已移至 **feishu-cli-chat** 技能。包括：
+> - `msg reaction add/remove/list` — 表情回应
+> - `msg pin/unpin` — 置顶/取消置顶
+> - `msg pins` — 查看群内置顶消息
+> - `msg delete` — 删除消息（仅 Bot 自己发的）
+> - `msg get` — 获取消息详情
+>
+> 请使用 feishu-cli-chat 技能操作以上功能。
 
 ## 其他消息命令
-
-### 获取消息详情
-
-```bash
-feishu-cli msg get <message_id>
-feishu-cli msg get om_xxx --output json
-
-# Bot 不在群内时，使用 User 身份
-feishu-cli msg get om_xxx --user-access-token "$UAT" -o json
-```
-
-> **注意**：`share_chat` 类型消息的 `chat_id` 是消息**发送所在的群**，而非被分享的群。被分享群的 ID 在 `body.content` 的 JSON 中（`{"chat_id":"oc_xxx"}`），注意区分。
 
 ### 转发消息
 
@@ -532,104 +470,7 @@ feishu-cli msg forward <message_id> \
   --receive-id-type email
 ```
 
-### 删除消息
-
-仅能删除机器人自己发送的消息，不可恢复。
-
-```bash
-feishu-cli msg delete <message_id>
-```
-
-### 获取消息列表
-
-```bash
-feishu-cli msg list \
-  --container-id oc_xxx \
-  --container-id-type chat \
-  --page-size 20 \
-  --sort-type ByCreateTimeDesc
-
-# Bot 不在群内时，使用 User 身份
-feishu-cli msg list \
-  --container-id oc_xxx \
-  --container-id-type chat \
-  --sort-type ByCreateTimeDesc \
-  --page-size 50 \
-  --user-access-token "$UAT"
-```
-
-支持参数：`--start-time`、`--end-time`（秒级时间戳）、`--page-token`、`--user-access-token`。
-
-### 获取会话历史
-
-```bash
-feishu-cli msg history \
-  --container-id oc_xxx \
-  --container-id-type chat \
-  --sort-type ByCreateTimeAsc \
-  --page-size 50
-
-# Bot 不在群内时，使用 User 身份
-feishu-cli msg history \
-  --container-id oc_xxx \
-  --container-id-type chat \
-  --sort-type ByCreateTimeAsc \
-  --page-size 50 \
-  --user-access-token "$UAT"
-```
-
-### 查询消息已读用户
-
-```bash
-feishu-cli msg read-users <message_id>
-feishu-cli msg read-users om_xxx --user-id-type user_id --page-size 50
-```
-
-### 搜索群聊
-
-```bash
-# Bot 身份搜索（仅返回 Bot 所在的群）
-feishu-cli msg search-chats --query "项目群"
-feishu-cli msg search-chats --page-size 20
-
-# User 身份搜索（可搜到用户所在的群和公开群，推荐）
-feishu-cli msg search-chats --query "项目群" --user-access-token "$UAT"
-```
-
-> **重要**：Bot 身份只能搜到 Bot 已加入的群。如果目标群没有加入 Bot，必须使用 `--user-access-token` 切换为 User 身份搜索。
-
-### 搜索消息（需 User Access Token）
-
-```bash
-# 搜索所有消息
-feishu-cli search messages "关键词" --user-access-token "$UAT"
-
-# 只搜索私聊消息
-feishu-cli search messages "关键词" --chat-type p2p_chat --user-access-token "$UAT"
-
-# 只搜索群聊消息
-feishu-cli search messages "关键词" --chat-type group_chat --user-access-token "$UAT"
-
-# 更多过滤条件
-feishu-cli search messages "关键词" \
-  --chat-ids oc_xxx \
-  --message-type file \
-  --from-type user \
-  --start-time 1704067200 \
-  --user-access-token "$UAT"
-```
-
-> **提示**：搜索群聊 API（`search-chats`）无法搜到 p2p 私聊会话。要查找私聊消息，使用 `search messages --chat-type p2p_chat`。
-
 ## 执行流程
-
-Claude 操作消息时按以下流程：
-
-### 读取群消息流程
-
-1. **搜索群聊**：`feishu-cli msg search-chats --query "群名"`
-2. **搜不到？** → 加 `--user-access-token "$UAT"` 重试（Bot 不在群内时必须用 User 身份）
-3. **获取消息**：`feishu-cli msg list --container-id <chat_id> --container-id-type chat`（身份与搜索时一致）
 
 ### 发送消息流程
 
@@ -651,11 +492,8 @@ Claude 操作消息时按以下流程：
 
 | 权限 | 说明 |
 |------|------|
-| `im:message` | 消息读写 |
+| `im:message` | 消息读写（发送/回复/转发） |
 | `im:message:send_as_bot` | 以机器人身份发送消息 |
-| `im:message:readonly` | 获取历史消息 |
-| `im:message.group_msg:get_as_user` | User 身份读取群消息（`--user-access-token` 读群消息必需） |
-| `im:chat:read` | 搜索群聊（User 身份） |
 
 ## 注意事项
 

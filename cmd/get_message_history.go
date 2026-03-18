@@ -47,7 +47,10 @@ var getMessageHistoryCmd = &cobra.Command{
 			return err
 		}
 
-		token := resolveOptionalUserToken(cmd)
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 
 		containerIDType, _ := cmd.Flags().GetString("container-id-type")
 		containerID, _ := cmd.Flags().GetString("container-id")
@@ -72,8 +75,30 @@ var getMessageHistoryCmd = &cobra.Command{
 		}
 
 		result, err := client.ListMessages(containerID, opts, token)
-		if err != nil {
+
+		// 降级判断：有 User Token 时，list API 失败或返回空结果都尝试 search+get
+		needFallback := false
+		if err != nil && token != "" {
+			// list API 报错（如 page_token 来自搜索 API 导致不兼容），尝试降级
+			needFallback = true
+		} else if err != nil {
 			return err
+		} else if token != "" && len(result.Items) == 0 && result.HasMore {
+			// list API 成功但空结果 + has_more=true → bot 不在群
+			needFallback = true
+		}
+
+		if needFallback {
+			fmt.Fprintf(cmd.ErrOrStderr(), "[提示] bot 不在此群中，通过搜索方式获取消息...\n")
+			fallbackResult, fallbackErr := listMessagesViaSearch(containerID, pageSize, pageToken, token)
+			if fallbackErr != nil {
+				// 如果搜索也失败，返回原始错误（如果有的话）
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("搜索降级失败: %w", fallbackErr)
+			}
+			result = fallbackResult
 		}
 
 		if output == "json" {

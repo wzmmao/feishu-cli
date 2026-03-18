@@ -51,7 +51,7 @@ func CreateChat(name, description, ownerID string, userIDs []string, chatType st
 }
 
 // GetChat 获取群聊信息
-func GetChat(chatID string) (*larkim.GetChatRespData, error) {
+func GetChat(chatID string, userAccessToken string) (*larkim.GetChatRespData, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func GetChat(chatID string) (*larkim.GetChatRespData, error) {
 		ChatId(chatID).
 		Build()
 
-	resp, err := client.Im.Chat.Get(Context(), req)
+	resp, err := client.Im.Chat.Get(Context(), req, UserTokenOption(userAccessToken)...)
 	if err != nil {
 		return nil, fmt.Errorf("获取群聊信息失败: %w", err)
 	}
@@ -74,7 +74,7 @@ func GetChat(chatID string) (*larkim.GetChatRespData, error) {
 }
 
 // UpdateChat 更新群聊信息
-func UpdateChat(chatID, name, description, ownerID string) error {
+func UpdateChat(chatID, name, description, ownerID string, userAccessToken string) error {
 	client, err := GetClient()
 	if err != nil {
 		return err
@@ -96,7 +96,7 @@ func UpdateChat(chatID, name, description, ownerID string) error {
 		Body(bodyBuilder.Build()).
 		Build()
 
-	resp, err := client.Im.Chat.Update(Context(), req)
+	resp, err := client.Im.Chat.Update(Context(), req, UserTokenOption(userAccessToken)...)
 	if err != nil {
 		return fmt.Errorf("更新群聊信息失败: %w", err)
 	}
@@ -109,7 +109,7 @@ func UpdateChat(chatID, name, description, ownerID string) error {
 }
 
 // DeleteChat 解散群聊
-func DeleteChat(chatID string) error {
+func DeleteChat(chatID string, userAccessToken string) error {
 	client, err := GetClient()
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func DeleteChat(chatID string) error {
 		ChatId(chatID).
 		Build()
 
-	resp, err := client.Im.Chat.Delete(Context(), req)
+	resp, err := client.Im.Chat.Delete(Context(), req, UserTokenOption(userAccessToken)...)
 	if err != nil {
 		return fmt.Errorf("解散群聊失败: %w", err)
 	}
@@ -180,7 +180,7 @@ type ListChatMembersResult struct {
 }
 
 // ListChatMembers 获取群成员列表
-func ListChatMembers(chatID, memberIDType string, pageSize int, pageToken string) (*ListChatMembersResult, error) {
+func ListChatMembers(chatID, memberIDType string, pageSize int, pageToken string, userAccessToken string) (*ListChatMembersResult, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -199,7 +199,7 @@ func ListChatMembers(chatID, memberIDType string, pageSize int, pageToken string
 		reqBuilder.PageToken(pageToken)
 	}
 
-	resp, err := client.Im.ChatMembers.Get(Context(), reqBuilder.Build())
+	resp, err := client.Im.ChatMembers.Get(Context(), reqBuilder.Build(), UserTokenOption(userAccessToken)...)
 	if err != nil {
 		return nil, fmt.Errorf("获取群成员列表失败: %w", err)
 	}
@@ -225,7 +225,7 @@ func ListChatMembers(chatID, memberIDType string, pageSize int, pageToken string
 }
 
 // AddChatMembers 添加群成员
-func AddChatMembers(chatID, memberIDType string, idList []string) error {
+func AddChatMembers(chatID, memberIDType string, idList []string, userAccessToken string) error {
 	client, err := GetClient()
 	if err != nil {
 		return err
@@ -241,7 +241,7 @@ func AddChatMembers(chatID, memberIDType string, idList []string) error {
 		reqBuilder.MemberIdType(memberIDType)
 	}
 
-	resp, err := client.Im.ChatMembers.Create(Context(), reqBuilder.Build())
+	resp, err := client.Im.ChatMembers.Create(Context(), reqBuilder.Build(), UserTokenOption(userAccessToken)...)
 	if err != nil {
 		return fmt.Errorf("添加群成员失败: %w", err)
 	}
@@ -254,7 +254,7 @@ func AddChatMembers(chatID, memberIDType string, idList []string) error {
 }
 
 // RemoveChatMembers 移除群成员
-func RemoveChatMembers(chatID, memberIDType string, idList []string) error {
+func RemoveChatMembers(chatID, memberIDType string, idList []string, userAccessToken string) error {
 	client, err := GetClient()
 	if err != nil {
 		return err
@@ -270,7 +270,7 @@ func RemoveChatMembers(chatID, memberIDType string, idList []string) error {
 		reqBuilder.MemberIdType(memberIDType)
 	}
 
-	resp, err := client.Im.ChatMembers.Delete(Context(), reqBuilder.Build())
+	resp, err := client.Im.ChatMembers.Delete(Context(), reqBuilder.Build(), UserTokenOption(userAccessToken)...)
 	if err != nil {
 		return fmt.Errorf("移除群成员失败: %w", err)
 	}

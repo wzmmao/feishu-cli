@@ -1,11 +1,13 @@
 ---
 name: feishu-cli-toolkit
 description: >-
-  飞书综合工具箱：电子表格、日历日程、任务管理、群聊管理、画板操作、PlantUML 图表、
-  文件管理、素材上传下载、文档评论、知识库、搜索、用户通讯录、文档附件下载。
-  当用户请求操作飞书表格、查看日历、创建任务、管理群聊、操作画板、生成 PlantUML、
-  管理文件、上传素材、查看评论、查看知识库、搜索消息、搜索文档、查询用户信息、查询部门、
-  下载文档附件时使用。涵盖 feishu-cli 除文档读写导入导出和权限管理外的全部功能。
+  飞书综合工具箱：电子表格、日历日程、任务管理、画板操作、PlantUML 图表、
+  文件管理、素材上传下载、文档评论、知识库、用户通讯录、文档附件下载。
+  当用户请求操作飞书表格、查看日历、创建任务、操作画板、生成 PlantUML、
+  管理文件、上传素材、查看评论、查看知识库、查询用户信息、查询部门、
+  下载文档附件时使用。
+  注意：群聊浏览/管理请使用 feishu-cli-chat，搜索请使用 feishu-cli-search，
+  发送消息请使用 feishu-cli-msg。
 argument-hint: <module> <command> [args]
 user-invocable: true
 allowed-tools: Bash, Read, Write
@@ -22,14 +24,14 @@ allowed-tools: Bash, Read, Write
 | 1 | 电子表格 | `sheet create/get/read/write/append` + V3 富文本 | `references/sheet-commands.md` |
 | 2 | 日历日程 | `calendar list/get/primary/create-event/event-search/freebusy` | `references/calendar-commands.md` |
 | 3 | 任务管理 | `task create/complete/delete` + subtask/member/reminder + `tasklist` | `references/task-commands.md` |
-| 4 | 群聊管理 | `chat create/get/update/delete/link` + `chat member` | `references/chat-commands.md` |
+| 4 | 群聊创建 | `chat create/link`（App Token，群信息/成员/消息互动请用 **feishu-cli-chat**） | `references/chat-commands.md` |
 | 5 | 画板操作 | `board image/import/nodes` + `doc add-board` | `references/board-commands.md` |
 | 6 | PlantUML | 飞书画板安全子集语法 | `references/plantuml-safe-subset.md` |
 | 7 | 文件管理 | `file list/mkdir/move/copy/delete/download/upload/version/meta/stats` | — |
 | 8 | 素材管理 | `media upload/download` | — |
 | 9 | 评论管理 | `comment list/add/delete/resolve/unresolve` + `comment reply` | — |
 | 10 | 知识库 | `wiki get/export/spaces/nodes/space-get` + `wiki member` | — |
-| 11 | 搜索 | `search messages/apps/docs`（需 User Access Token，推荐使用 `feishu-cli-search` 技能） | `references/search-commands.md` |
+| 11 | 搜索 | 请使用 **feishu-cli-search**（文档/应用）或 **feishu-cli-chat**（消息/群聊） | `references/search-commands.md` |
 | 12 | 用户和部门 | `user info/search/list` + `dept get/children` | — |
 | 13 | 附件下载 | `doc export` + `media download` 批量下载文档附件 | — |
 
@@ -179,29 +181,19 @@ feishu-cli tasklist delete <tasklist_guid>
 
 ## 4. 群聊管理
 
-创建/管理群聊，管理群成员。
+> **推荐使用 feishu-cli-chat 技能**，提供完整的群聊浏览、消息历史、成员管理等功能，且默认使用 User Token。
 
-### 常用命令
+以下仅列出 App Token 专属命令（feishu-cli-chat 不覆盖的）：
 
 ```bash
-# 群聊 CRUD
+# 创建群聊（仅 App Token）
 feishu-cli chat create --name "项目群" --user-ids id1,id2 [--chat-type private|public]
-feishu-cli chat get <chat_id>
-feishu-cli chat update <chat_id> --name "新群名" [--description "新描述"]
-feishu-cli chat delete <chat_id>
 
-# 获取群分享链接
+# 获取群分享链接（仅 App Token）
 feishu-cli chat link <chat_id> [--validity-period week|year|permanently]
-
-# 群成员管理
-feishu-cli chat member list <chat_id> [--member-id-type open_id|user_id|union_id]
-feishu-cli chat member add <chat_id> --id-list id1,id2 [--member-id-type open_id]
-feishu-cli chat member remove <chat_id> --id-list id1,id2 [--member-id-type open_id]
 ```
 
 **详细参考**：读取 `references/chat-commands.md` 获取完整参数和示例。
-
-**权限要求**：`im:chat`（群聊管理）、`im:chat:read`（读取）、`im:chat:member`（成员操作）
 
 ---
 
@@ -448,49 +440,9 @@ feishu-cli wiki member remove <space_id> --member-type userid --member-id <USER_
 
 ## 11. 搜索
 
-搜索飞书消息、应用和文档。**重要：需要 User Access Token**（非 App Access Token）。
-
-### 常用命令
-
-```bash
-# 搜索消息
-feishu-cli search messages "关键词" \
-  --user-access-token <token> \
-  [--chat-ids oc_xxx] \
-  [--message-type file|image|media] \
-  [--chat-type group_chat|p2p_chat] \
-  [--from-type bot|user] \
-  [--start-time 1704067200] \
-  [--end-time 1704153600]
-
-# 搜索应用
-feishu-cli search apps "应用名" --user-access-token <token>
-
-# 搜索文档和 Wiki
-feishu-cli search docs "关键词" \
-  --user-access-token <token> \
-  [--docs-types doc,sheet,wiki] \
-  [--owner-ids ou_xxx] \
-  [--chat-ids oc_xxx] \
-  [--count 20] \
-  [--offset 0]
-```
-
-### 文档搜索要点
-
-- **文档类型使用小写**：doc, docx, sheet, slides, bitable, mindnote, file, wiki, shortcut
-- **搜索范围**：可按所有者、群聊筛选
-- **分页**：通过 `--count` 和 `--offset` 控制（offset + count < 200）
-
-### User Access Token 说明
-
-搜索 API 必须使用 User Access Token。**完整的认证流程、scope 配置、排错指南请参考 `feishu-cli-auth` 技能**。
-
-快速参考：
-- 推荐 scope：`search:docs:read search:message offline_access`
-- AI Agent 使用两步式非交互登录：`auth login --print-url` + `auth callback`
-- Token 有效期 2 小时，Refresh Token 30 天（需 `offline_access` scope）
-- 登录后无需手动传 Token，过期自动刷新
+> **推荐使用专项技能**：
+> - 搜索消息/群内搜索 → **feishu-cli-chat**（含群聊浏览，auth login 后自动使用 User Token）
+> - 搜索文档/应用/跨模块搜索 → **feishu-cli-search**（含完整的 Token 前置检查和排错流程）
 
 **搜索参数详细参考**：读取 `references/search-commands.md` 获取完整筛选参数说明。
 

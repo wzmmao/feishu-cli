@@ -44,12 +44,16 @@ var chatMemberListCmd = &cobra.Command{
 			return err
 		}
 
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 		chatID := args[0]
 		memberIDType, _ := cmd.Flags().GetString("member-id-type")
 		pageSize, _ := cmd.Flags().GetInt("page-size")
 		pageToken, _ := cmd.Flags().GetString("page-token")
 
-		result, err := client.ListChatMembers(chatID, memberIDType, pageSize, pageToken)
+		result, err := client.ListChatMembers(chatID, memberIDType, pageSize, pageToken, token)
 		if err != nil {
 			return err
 		}
@@ -77,6 +81,10 @@ var chatMemberAddCmd = &cobra.Command{
 			return err
 		}
 
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 		chatID := args[0]
 		memberIDType, _ := cmd.Flags().GetString("member-id-type")
 		idListStr, _ := cmd.Flags().GetString("id-list")
@@ -86,7 +94,7 @@ var chatMemberAddCmd = &cobra.Command{
 			return fmt.Errorf("成员 ID 列表不能为空")
 		}
 
-		if err := client.AddChatMembers(chatID, memberIDType, idList); err != nil {
+		if err := client.AddChatMembers(chatID, memberIDType, idList, token); err != nil {
 			return err
 		}
 
@@ -117,6 +125,10 @@ var chatMemberRemoveCmd = &cobra.Command{
 			return err
 		}
 
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 		chatID := args[0]
 		memberIDType, _ := cmd.Flags().GetString("member-id-type")
 		idListStr, _ := cmd.Flags().GetString("id-list")
@@ -126,7 +138,7 @@ var chatMemberRemoveCmd = &cobra.Command{
 			return fmt.Errorf("成员 ID 列表不能为空")
 		}
 
-		if err := client.RemoveChatMembers(chatID, memberIDType, idList); err != nil {
+		if err := client.RemoveChatMembers(chatID, memberIDType, idList, token); err != nil {
 			return err
 		}
 
@@ -146,16 +158,19 @@ func init() {
 	chatMemberListCmd.Flags().String("member-id-type", "open_id", "成员 ID 类型（open_id/user_id/union_id）")
 	chatMemberListCmd.Flags().Int("page-size", 0, "每页数量")
 	chatMemberListCmd.Flags().String("page-token", "", "分页标记")
+	chatMemberListCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 
 	// add 子命令
 	chatMemberCmd.AddCommand(chatMemberAddCmd)
 	chatMemberAddCmd.Flags().String("member-id-type", "open_id", "成员 ID 类型（open_id/user_id/union_id/app_id）")
 	chatMemberAddCmd.Flags().String("id-list", "", "成员 ID 列表（逗号分隔）")
+	chatMemberAddCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 	mustMarkFlagRequired(chatMemberAddCmd, "id-list")
 
 	// remove 子命令
 	chatMemberCmd.AddCommand(chatMemberRemoveCmd)
 	chatMemberRemoveCmd.Flags().String("member-id-type", "open_id", "成员 ID 类型（open_id/user_id/union_id/app_id）")
 	chatMemberRemoveCmd.Flags().String("id-list", "", "成员 ID 列表（逗号分隔）")
+	chatMemberRemoveCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 	mustMarkFlagRequired(chatMemberRemoveCmd, "id-list")
 }

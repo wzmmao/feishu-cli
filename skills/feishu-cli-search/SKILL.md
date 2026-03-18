@@ -45,7 +45,7 @@ feishu-cli auth login --print-url --scopes \
    calendar:calendar.event:reply calendar:calendar.free_busy:read \
    task:task:read task:task:write \
    task:tasklist:read task:tasklist:write \
-   im:message:readonly im:message.group_msg:get_as_user im:chat:read contact:user.base:readonly \
+   im:message:readonly im:message.group_msg:get_as_user im:chat:read im:chat:readonly im:chat.members:read contact:user.base:readonly \
    drive:drive.metadata:readonly"
 ```
 
@@ -238,3 +238,17 @@ feishu-cli search apps "OKR" --page-size 50
 | offset + count 超过 200 | 飞书 API 限制 | 最多翻到第 200 条结果 |
 
 **完整的认证流程和 Token 管理请参考 `feishu-cli-auth` 技能。**
+
+---
+
+## 与其他技能的分工
+
+| 场景 | 使用技能 |
+|------|---------|
+| 按关键词搜索文档/应用 | **feishu-cli-search**（本技能） |
+| 按关键词搜索消息（含高级筛选） | **feishu-cli-search**（本技能） |
+| 浏览群聊历史消息、搜索群聊列表 | feishu-cli-chat |
+| Reaction/Pin/删除/获取消息详情 | feishu-cli-chat |
+| 群聊信息管理、成员管理 | feishu-cli-chat |
+
+搜索消息与浏览聊天记录的区别：搜索（`search messages`）用关键词跨会话检索，返回消息 ID 列表；浏览（`msg history`）获取指定会话的连续消息流。如果用户的意图是"找到包含某关键词的消息"用搜索，"看看某个群最近在聊什么"用浏览。

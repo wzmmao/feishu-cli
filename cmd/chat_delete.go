@@ -24,6 +24,10 @@ var chatDeleteCmd = &cobra.Command{
 			return err
 		}
 
+		token, err := resolveRequiredUserToken(cmd)
+		if err != nil {
+			return err
+		}
 		chatID := args[0]
 
 		if !confirmAction(fmt.Sprintf("确定要解散群聊 %s 吗？此操作不可逆", chatID)) {
@@ -31,7 +35,7 @@ var chatDeleteCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := client.DeleteChat(chatID); err != nil {
+		if err := client.DeleteChat(chatID, token); err != nil {
 			return err
 		}
 
@@ -44,4 +48,5 @@ var chatDeleteCmd = &cobra.Command{
 
 func init() {
 	chatCmd.AddCommand(chatDeleteCmd)
+	chatDeleteCmd.Flags().String("user-access-token", "", "User Access Token（用户授权令牌）")
 }
