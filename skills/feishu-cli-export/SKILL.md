@@ -3,9 +3,10 @@ name: feishu-cli-export
 description: >-
   将飞书文档或知识库文档导出为 Markdown 文件，或导出为 PDF/Word 等格式（异步任务），
   或下载文档素材（图片/画板缩略图）。
+  支持 docx（新版文档）和 sheet（电子表格）两种知识库文档类型的 Markdown 导出。
   当用户请求"导出文档"、"导出为 Markdown"、"转换为 Markdown"、"保存为 md"、
   "导出 PDF"、"导出 Word"、"下载文档"、"下载素材"、"下载文档图片"、
-  "下载画板缩略图"时使用。
+  "下载画板缩略图"、"导出表格"、"表格转 Markdown"时使用。
   本技能专注于导出操作。从本地 DOCX 文件导入请使用 feishu-cli-import。
 argument-hint: <document_id|node_token|url> [output_path]
 user-invocable: true
@@ -14,7 +15,7 @@ allowed-tools: Bash, Read
 
 # 飞书文档导出技能
 
-将飞书云文档或知识库文档导出为本地 Markdown 文件，或导出为 PDF/Word 等格式。
+将飞书云文档或知识库文档导出为本地 Markdown 文件，或导出为 PDF/Word 等格式。支持 docx（新版文档）和 sheet（电子表格）两种知识库文档类型。
 
 ## 前置条件
 
@@ -82,9 +83,9 @@ allowed-tools: Bash, Read
 | URL 格式 | 类型 | 命令 |
 |---------|------|------|
 | `https://xxx.feishu.cn/docx/<id>` | 普通文档 | `doc export` |
-| `https://xxx.feishu.cn/wiki/<token>` | 知识库 | `wiki export` |
+| `https://xxx.feishu.cn/wiki/<token>` | 知识库（docx/sheet） | `wiki export` |
 | `https://xxx.larkoffice.com/docx/<id>` | 普通文档 | `doc export` |
-| `https://xxx.larkoffice.com/wiki/<token>` | 知识库 | `wiki export` |
+| `https://xxx.larkoffice.com/wiki/<token>` | 知识库（docx/sheet） | `wiki export` |
 
 ## 输出格式
 
@@ -232,14 +233,15 @@ sleep 5 && feishu-cli doc export <doc_id>
 
 | 问题 | 说明 |
 |------|------|
-| 表格导出 | 表格内单元格内容可能显示为 `<!-- Unknown block type: 32 -->`，这是块类型 32（表格单元格）的已知转换问题 |
+| 表格导出 | 文档内嵌表格（block_type 31）的单元格内容可能显示为 `<!-- Unknown block type: 32 -->`，这是块类型 32（表格单元格）的已知转换问题 |
 | 目录节点 | 知识库目录节点导出内容为 `[Wiki 目录...]`，需单独获取子节点 |
 
 ## 已验证功能
 
 以下导出功能已通过测试验证：
 - 普通文档导出 ✅
-- 知识库文档导出 ✅
+- 知识库文档导出（docx 类型）✅
+- 知识库电子表格导出（sheet 类型）✅ — 自动读取所有工作表，转为 Markdown 表格，富文本链接完整保留
 - 标题、段落、列表（含嵌套列表）、代码块、引用、分割线 ✅
 - 任务列表（Todo）✅
 - **图片下载** ✅（使用 `--download-images`）
