@@ -223,8 +223,8 @@ func CreateSpreadsheet(ctx context.Context, title string, folderToken string) (*
 	}, nil
 }
 
-// GetSpreadsheet 获取电子表格信息 (V3 API)
-func GetSpreadsheet(ctx context.Context, spreadsheetToken string) (*SpreadsheetInfo, error) {
+// GetSpreadsheet 获取电子表格信息 (V3 API)，userAccessToken 为空时使用 Tenant Token
+func GetSpreadsheet(ctx context.Context, spreadsheetToken string, userAccessToken ...string) (*SpreadsheetInfo, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -234,7 +234,9 @@ func GetSpreadsheet(ctx context.Context, spreadsheetToken string) (*SpreadsheetI
 		SpreadsheetToken(spreadsheetToken).
 		Build()
 
-	resp, err := client.Sheets.Spreadsheet.Get(ctx, req)
+	uat := firstString(userAccessToken)
+
+	resp, err := client.Sheets.Spreadsheet.Get(ctx, req, UserTokenOption(uat)...)
 	if err != nil {
 		return nil, fmt.Errorf("获取电子表格信息失败: %w", err)
 	}
@@ -296,10 +298,7 @@ func QuerySheets(ctx context.Context, spreadsheetToken string, userAccessToken .
 		SpreadsheetToken(spreadsheetToken).
 		Build()
 
-	uat := ""
-	if len(userAccessToken) > 0 {
-		uat = userAccessToken[0]
-	}
+	uat := firstString(userAccessToken)
 	opts := UserTokenOption(uat)
 
 	resp, err := client.Sheets.SpreadsheetSheet.Query(ctx, req, opts...)
@@ -388,7 +387,7 @@ func GetSheet(ctx context.Context, spreadsheetToken, sheetID string) (*SheetInfo
 }
 
 // FindCells 查找单元格 (V3 API)
-func FindCells(ctx context.Context, spreadsheetToken, sheetID string, findStr string, matchCase, matchEntireCell, searchByRegex bool, rangeStr string) (*FindReplaceResult, error) {
+func FindCells(ctx context.Context, spreadsheetToken, sheetID string, findStr string, matchCase, matchEntireCell, searchByRegex bool, rangeStr string, userAccessToken ...string) (*FindReplaceResult, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -417,7 +416,9 @@ func FindCells(ctx context.Context, spreadsheetToken, sheetID string, findStr st
 			Build()).
 		Build()
 
-	resp, err := client.Sheets.SpreadsheetSheet.Find(ctx, req)
+	uat := firstString(userAccessToken)
+
+	resp, err := client.Sheets.SpreadsheetSheet.Find(ctx, req, UserTokenOption(uat)...)
 	if err != nil {
 		return nil, fmt.Errorf("查找单元格失败: %w", err)
 	}
@@ -551,10 +552,7 @@ func ReadCells(ctx context.Context, spreadsheetToken, rangeStr string, valueRend
 		path += "?" + params.Encode()
 	}
 
-	uat := ""
-	if len(userAccessToken) > 0 {
-		uat = userAccessToken[0]
-	}
+	uat := firstString(userAccessToken)
 	respBody, err := v2APICallWithToken(client, ctx, "GET", path, nil, uat)
 	if err != nil {
 		return nil, fmt.Errorf("读取单元格失败: %w", err)
@@ -628,7 +626,7 @@ func ReadCellsBatch(ctx context.Context, spreadsheetToken string, ranges []strin
 }
 
 // WriteCells 写入单元格数据 (V2 API)
-func WriteCells(ctx context.Context, spreadsheetToken, rangeStr string, values [][]any) (*CellRange, error) {
+func WriteCells(ctx context.Context, spreadsheetToken, rangeStr string, values [][]any, userAccessToken ...string) (*CellRange, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -662,7 +660,9 @@ func WriteCells(ctx context.Context, spreadsheetToken, rangeStr string, values [
 		},
 	}
 
-	respBody, err := v2APICall(client, ctx, "PUT", path, reqBody)
+	uat := firstString(userAccessToken)
+
+	respBody, err := v2APICallWithToken(client, ctx, "PUT", path, reqBody, uat)
 	if err != nil {
 		return nil, fmt.Errorf("写入单元格失败: %w", err)
 	}
@@ -729,7 +729,7 @@ func WriteCellsBatch(ctx context.Context, spreadsheetToken string, valueRanges [
 }
 
 // AppendCells 追加数据 (V2 API)
-func AppendCells(ctx context.Context, spreadsheetToken, rangeStr string, values [][]any, insertDataOption string) (*CellRange, error) {
+func AppendCells(ctx context.Context, spreadsheetToken, rangeStr string, values [][]any, insertDataOption string, userAccessToken ...string) (*CellRange, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -766,7 +766,9 @@ func AppendCells(ctx context.Context, spreadsheetToken, rangeStr string, values 
 		},
 	}
 
-	respBody, err := v2APICall(client, ctx, "POST", path, reqBody)
+	uat := firstString(userAccessToken)
+
+	respBody, err := v2APICallWithToken(client, ctx, "POST", path, reqBody, uat)
 	if err != nil {
 		return nil, fmt.Errorf("追加数据失败: %w", err)
 	}
@@ -1321,7 +1323,7 @@ func SetCellStyleBatch(ctx context.Context, spreadsheetToken string, styles []ma
 }
 
 // GetSpreadsheetMeta 获取表格元信息 (V2 API)
-func GetSpreadsheetMeta(ctx context.Context, spreadsheetToken string, extFields string) (map[string]any, error) {
+func GetSpreadsheetMeta(ctx context.Context, spreadsheetToken string, extFields string, userAccessToken ...string) (map[string]any, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -1332,7 +1334,9 @@ func GetSpreadsheetMeta(ctx context.Context, spreadsheetToken string, extFields 
 		path += "?extFields=" + extFields
 	}
 
-	respBody, err := v2APICall(client, ctx, "GET", path, nil)
+	uat := firstString(userAccessToken)
+
+	respBody, err := v2APICallWithToken(client, ctx, "GET", path, nil, uat)
 	if err != nil {
 		return nil, fmt.Errorf("获取表格元信息失败: %w", err)
 	}
@@ -1903,7 +1907,7 @@ func AppendCellsV3(ctx context.Context, spreadsheetToken, sheetID, rangeStr stri
 
 // ReadCellsPlainV3 获取纯文本内容 (V3 API)
 // POST /open-apis/sheets/v3/spreadsheets/:spreadsheet_token/sheets/:sheet_id/values/batch_get_plain
-func ReadCellsPlainV3(ctx context.Context, spreadsheetToken, sheetID string, ranges []string) ([]*CellRange, error) {
+func ReadCellsPlainV3(ctx context.Context, spreadsheetToken, sheetID string, ranges []string, userAccessToken ...string) ([]*CellRange, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -1916,7 +1920,9 @@ func ReadCellsPlainV3(ctx context.Context, spreadsheetToken, sheetID string, ran
 		"ranges": ranges,
 	}
 
-	respBody, err := v2APICall(client, ctx, "POST", path, reqBody)
+	uat := firstString(userAccessToken)
+
+	respBody, err := v2APICallWithToken(client, ctx, "POST", path, reqBody, uat)
 	if err != nil {
 		return nil, fmt.Errorf("V3 获取纯文本失败: %w", err)
 	}
@@ -1961,7 +1967,7 @@ func ReadCellsPlainV3(ctx context.Context, spreadsheetToken, sheetID string, ran
 
 // ReadCellsRichV3 获取富文本内容 (V3 API)
 // POST /open-apis/sheets/v3/spreadsheets/:spreadsheet_token/sheets/:sheet_id/values/batch_get
-func ReadCellsRichV3(ctx context.Context, spreadsheetToken, sheetID string, ranges []string, dateTimeRenderOption, valueRenderOption, userIDType string) ([]*CellRangeV3, error) {
+func ReadCellsRichV3(ctx context.Context, spreadsheetToken, sheetID string, ranges []string, dateTimeRenderOption, valueRenderOption, userIDType string, userAccessToken ...string) ([]*CellRangeV3, error) {
 	client, err := GetClient()
 	if err != nil {
 		return nil, err
@@ -1989,7 +1995,9 @@ func ReadCellsRichV3(ctx context.Context, spreadsheetToken, sheetID string, rang
 		"ranges": ranges,
 	}
 
-	respBody, err := v2APICall(client, ctx, "POST", path, reqBody)
+	uat := firstString(userAccessToken)
+
+	respBody, err := v2APICallWithToken(client, ctx, "POST", path, reqBody, uat)
 	if err != nil {
 		return nil, fmt.Errorf("V3 获取富文本失败: %w", err)
 	}

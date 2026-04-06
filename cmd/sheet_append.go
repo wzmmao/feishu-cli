@@ -55,7 +55,9 @@ var sheetAppendCmd = &cobra.Command{
 			return fmt.Errorf("解析数据失败: %w", err)
 		}
 
-		result, err := client.AppendCells(client.Context(), spreadsheetToken, rangeStr, values, insertOption)
+		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
+
+		result, err := client.AppendCells(client.Context(), spreadsheetToken, rangeStr, values, insertOption, userAccessToken)
 		if err != nil {
 			return err
 		}
@@ -82,4 +84,5 @@ func init() {
 	sheetAppendCmd.Flags().String("data-file", "", "数据文件路径")
 	sheetAppendCmd.Flags().String("insert-option", "", "插入选项: OVERWRITE, INSERT_ROWS")
 	sheetAppendCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")
+	sheetAppendCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问无 App 权限的表格）")
 }

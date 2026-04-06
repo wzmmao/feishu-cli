@@ -2,9 +2,26 @@ package client
 
 import (
 	"strings"
+	"time"
 
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 )
+
+// firstString 返回可变参数字符串切片的第一个元素，空切片返回空字符串。
+func firstString(s []string) string {
+	if len(s) > 0 {
+		return s[0]
+	}
+	return ""
+}
+
+// resolveTimeout 返回可变参数中第一个正值超时，否则返回默认值 def。
+func resolveTimeout(def time.Duration, timeout []time.Duration) time.Duration {
+	if len(timeout) > 0 && timeout[0] > 0 {
+		return timeout[0]
+	}
+	return def
+}
 
 // UserTokenOption 当 userAccessToken 非空时返回请求选项，否则返回 nil（回退到 tenant token）
 func UserTokenOption(userAccessToken string) []larkcore.RequestOptionFunc {

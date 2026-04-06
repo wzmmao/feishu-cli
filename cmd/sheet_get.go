@@ -15,8 +15,9 @@ var sheetGetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		spreadsheetToken := args[0]
 		output, _ := cmd.Flags().GetString("output")
+		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
 
-		info, err := client.GetSpreadsheet(client.Context(), spreadsheetToken)
+		info, err := client.GetSpreadsheet(client.Context(), spreadsheetToken, userAccessToken)
 		if err != nil {
 			return err
 		}
@@ -45,4 +46,5 @@ func init() {
 	sheetCmd.AddCommand(sheetGetCmd)
 
 	sheetGetCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")
+	sheetGetCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问无 App 权限的表格）")
 }

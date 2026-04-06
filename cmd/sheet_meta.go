@@ -20,8 +20,9 @@ var sheetMetaCmd = &cobra.Command{
 		spreadsheetToken := args[0]
 		extFields, _ := cmd.Flags().GetString("ext-fields")
 		output, _ := cmd.Flags().GetString("output")
+		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
 
-		meta, err := client.GetSpreadsheetMeta(client.Context(), spreadsheetToken, extFields)
+		meta, err := client.GetSpreadsheetMeta(client.Context(), spreadsheetToken, extFields, userAccessToken)
 		if err != nil {
 			return err
 		}
@@ -69,4 +70,5 @@ func init() {
 
 	sheetMetaCmd.Flags().String("ext-fields", "", "扩展字段（逗号分隔）: protectedRange, mergedCell")
 	sheetMetaCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")
+	sheetMetaCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问无 App 权限的表格）")
 }

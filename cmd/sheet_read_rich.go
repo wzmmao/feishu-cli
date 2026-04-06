@@ -39,13 +39,14 @@ var sheetReadRichCmd = &cobra.Command{
 		valueRender, _ := cmd.Flags().GetString("value-render")
 		userIDType, _ := cmd.Flags().GetString("user-id-type")
 		output, _ := cmd.Flags().GetString("output")
+		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
 
 		// 处理 shell 转义
 		for i := range ranges {
 			ranges[i] = unescapeSheetRange(ranges[i])
 		}
 
-		result, err := client.ReadCellsRichV3(client.Context(), spreadsheetToken, sheetID, ranges, dateTimeRender, valueRender, userIDType)
+		result, err := client.ReadCellsRichV3(client.Context(), spreadsheetToken, sheetID, ranges, dateTimeRender, valueRender, userIDType, userAccessToken)
 		if err != nil {
 			return err
 		}
@@ -141,4 +142,5 @@ func init() {
 	sheetReadRichCmd.Flags().String("value-render", "", "数值渲染选项: formatted_value, unformatted_value")
 	sheetReadRichCmd.Flags().String("user-id-type", "", "用户 ID 类型: open_id, union_id, user_id")
 	sheetReadRichCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")
+	sheetReadRichCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问无 App 权限的表格）")
 }

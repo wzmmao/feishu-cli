@@ -33,13 +33,14 @@ var sheetReadPlainCmd = &cobra.Command{
 		sheetID := args[1]
 		ranges := args[2:]
 		output, _ := cmd.Flags().GetString("output")
+		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
 
 		// 处理 shell 转义
 		for i := range ranges {
 			ranges[i] = unescapeSheetRange(ranges[i])
 		}
 
-		result, err := client.ReadCellsPlainV3(client.Context(), spreadsheetToken, sheetID, ranges)
+		result, err := client.ReadCellsPlainV3(client.Context(), spreadsheetToken, sheetID, ranges, userAccessToken)
 		if err != nil {
 			return err
 		}
@@ -74,4 +75,5 @@ func init() {
 	sheetCmd.AddCommand(sheetReadPlainCmd)
 
 	sheetReadPlainCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")
+	sheetReadPlainCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问无 App 权限的表格）")
 }

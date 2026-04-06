@@ -61,7 +61,9 @@ var sheetWriteCmd = &cobra.Command{
 			return fmt.Errorf("解析数据失败（需要 JSON 二维数组）: %w", err)
 		}
 
-		result, err := client.WriteCells(client.Context(), spreadsheetToken, rangeStr, values)
+		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
+
+		result, err := client.WriteCells(client.Context(), spreadsheetToken, rangeStr, values, userAccessToken)
 		if err != nil {
 			return err
 		}
@@ -87,4 +89,5 @@ func init() {
 	sheetWriteCmd.Flags().StringP("data", "d", "", "要写入的数据（JSON 二维数组）")
 	sheetWriteCmd.Flags().String("data-file", "", "数据文件路径")
 	sheetWriteCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")
+	sheetWriteCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问无 App 权限的表格）")
 }

@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/riba2534/feishu-cli/internal/client"
 	"github.com/riba2534/feishu-cli/internal/config"
@@ -63,10 +65,20 @@ var importDiagramCmd = &cobra.Command{
 			Style:       style,
 		}
 
-		result, err := client.ImportDiagram(whiteboardID, source, opts)
-		if err != nil {
-			return err
+		retryResult := client.DoWithRetry(func() (*client.ImportDiagramResult, http.Header, error) {
+			r, err := client.ImportDiagram(whiteboardID, source, opts)
+			return r, nil, err
+		}, client.RetryConfig{
+			MaxRetries:       5,
+			RetryOnRateLimit: true,
+			OnRetry: func(attempt int, err error, wait time.Duration) {
+				fmt.Printf("  ⚠ 图表导入重试 %d/5 (等待 %.1fs): %v\n", attempt, wait.Seconds(), err)
+			},
+		})
+		if retryResult.Err != nil {
+			return retryResult.Err
 		}
+		result := retryResult.Value
 
 		if output == "json" {
 			if err := printJSON(map[string]any{

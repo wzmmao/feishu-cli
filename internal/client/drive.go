@@ -82,8 +82,9 @@ func UploadMediaWithExtra(filePath, parentType, parentNode, fileName, extra stri
 
 // DownloadMediaOptions holds optional parameters for DownloadMedia
 type DownloadMediaOptions struct {
-	UserAccessToken string // User Access Token（可选）
-	DocToken        string // 文档 Token（文档内嵌图片下载时需要）
+	UserAccessToken string        // User Access Token（可选）
+	DocToken        string        // 文档 Token（文档内嵌图片下载时需要）
+	Timeout         time.Duration // 自定义超时时间（0 表示使用默认 5 分钟）
 }
 
 // DownloadMedia downloads a file from Feishu drive
@@ -109,7 +110,12 @@ func DownloadMedia(fileToken string, outputPath string, opts ...DownloadMediaOpt
 		}
 	}
 
-	resp, err := client.Drive.Media.Download(ContextWithTimeout(downloadTimeout), reqBuilder.Build(), reqOpts...)
+	t := downloadTimeout
+	if len(opts) > 0 && opts[0].Timeout > 0 {
+		t = opts[0].Timeout
+	}
+
+	resp, err := client.Drive.Media.Download(ContextWithTimeout(t), reqBuilder.Build(), reqOpts...)
 	if err != nil {
 		return fmt.Errorf("下载素材失败: %w", err)
 	}
@@ -161,13 +167,13 @@ func GetMediaTempURL(fileToken string, opts ...DownloadMediaOptions) (string, er
 }
 
 // DownloadFromURL downloads a file from a URL with size limit
-func DownloadFromURL(url string, outputPath string) error {
+func DownloadFromURL(url string, outputPath string, timeout ...time.Duration) error {
 	if err := validatePath(outputPath); err != nil {
 		return err
 	}
 
 	httpClient := &http.Client{
-		Timeout: downloadTimeout,
+		Timeout: resolveTimeout(downloadTimeout, timeout),
 	}
 
 	resp, err := httpClient.Get(url)
@@ -463,7 +469,7 @@ func CreateShortcut(parentToken string, targetFileToken string, targetType strin
 }
 
 // DownloadFile 下载云空间文件
-func DownloadFile(fileToken string, outputPath string) error {
+func DownloadFile(fileToken string, outputPath string, timeout ...time.Duration) error {
 	if err := validatePath(outputPath); err != nil {
 		return err
 	}
@@ -477,7 +483,7 @@ func DownloadFile(fileToken string, outputPath string) error {
 		FileToken(fileToken).
 		Build()
 
-	resp, err := client.Drive.File.Download(ContextWithTimeout(downloadTimeout), req)
+	resp, err := client.Drive.File.Download(ContextWithTimeout(resolveTimeout(downloadTimeout, timeout)), req)
 	if err != nil {
 		return fmt.Errorf("下载文件失败: %w", err)
 	}

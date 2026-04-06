@@ -760,12 +760,25 @@ func phase1CreateBlocks(
 			}
 
 			// 只创建画板占位块，不导入图表
-			boardResult, err := client.AddBoard(documentID, "", -1)
-			if err != nil {
-				fmt.Printf("  ✗ %s %d 创建画板失败: %v\n", syntaxLabel, diagramIdx, err)
+			createResult := client.DoWithRetry(func() (*client.AddBoardResult, http.Header, error) {
+				r, err := client.AddBoard(documentID, "", -1)
+				return r, nil, err
+			}, client.RetryConfig{
+				MaxRetries:       5,
+				RetryOnRateLimit: true,
+				OnRetry: func(attempt int, err error, wait time.Duration) {
+					if verbose {
+						fmt.Printf("  ⚠ %s %d 创建画板重试 %d/5 (等待 %.1fs): %v\n",
+							syntaxLabel, diagramIdx, attempt, wait.Seconds(), err)
+					}
+				},
+			})
+			if createResult.Err != nil {
+				fmt.Printf("  ✗ %s %d 创建画板失败: %v\n", syntaxLabel, diagramIdx, createResult.Err)
 				stats.diagramFailed++
 				continue
 			}
+			boardResult := createResult.Value
 
 			if boardResult.WhiteboardID == "" {
 				fmt.Printf("  ✗ %s %d 未返回画板 ID\n", syntaxLabel, diagramIdx)

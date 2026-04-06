@@ -32,7 +32,9 @@ var sheetFindCmd = &cobra.Command{
 		searchByRegex, _ := cmd.Flags().GetBool("regex")
 		output, _ := cmd.Flags().GetString("output")
 
-		result, err := client.FindCells(client.Context(), spreadsheetToken, sheetID, keyword, matchCase, matchEntireCell, searchByRegex, rangeStr)
+		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
+
+		result, err := client.FindCells(client.Context(), spreadsheetToken, sheetID, keyword, matchCase, matchEntireCell, searchByRegex, rangeStr, userAccessToken)
 		if err != nil {
 			return err
 		}
@@ -65,4 +67,5 @@ func init() {
 	sheetFindCmd.Flags().Bool("match-entire-cell", false, "完全匹配单元格")
 	sheetFindCmd.Flags().Bool("regex", false, "使用正则表达式")
 	sheetFindCmd.Flags().StringP("output", "o", "text", "输出格式: text, json")
+	sheetFindCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问无 App 权限的表格）")
 }
