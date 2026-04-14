@@ -34,6 +34,7 @@ feishu-cli 是一个功能完整的飞书开放平台命令行工具。它将飞
 - **双向转换零损耗** — 支持 40+ 种块类型，Markdown 导入飞书后再导出，内容完整保留
 - **图表原生渲染** — Mermaid（8 种图表类型）和 PlantUML 自动转换为飞书画板，不是截图，是可编辑的矢量图
 - **大规模文档处理** — 三阶段并发管道架构，实测 10,000+ 行 / 127 个图表 / 170+ 个表格一次导入
+- **P2P 私聊原生可读** — `msg history --user-email` 一条命令打通「搜用户 → 反查 p2p chat_id → 读消息」，输出自动带 `sender_names` 映射，AI Agent 直接拿结构化带名消息流，无需额外查群成员
 - **AI Agent 原生** — 16 个技能文件覆盖飞书全功能，AI 助手即装即用
 - **一个工具覆盖全平台** — 文档、知识库、表格、多维表格、消息、邮箱、日历、任务、视频会议、妙记、云盘、权限、画板、评论、搜索
 
@@ -108,7 +109,7 @@ feishu-cli doc import large-doc.md --title "大文档" \
 | **知识库** | 空间列表、节点增删改查、导出、空间详情、成员管理 |
 | **电子表格** | V2 基础读写 + V3 富文本 API，行列操作、样式、合并、查找替换、导出 XLSX/CSV |
 | **多维表格** | base/v3 API 全覆盖：数据表/字段/记录 CRUD、视图配置（filter/sort/group/visible-fields/timebar/card）、角色 CRUD、高级权限、数据聚合、工作流（48 个命令） |
-| **消息** | 发送（text/post/image/file/card 等 11 种类型）、转发、合并转发、回复、Pin、表情回复、搜索群聊（Bot/User 双身份）、历史记录、批量获取、资源下载、话题回复 |
+| **消息** | 发送（text/post/image/file/card 等 11 种类型）、转发、合并转发、回复、Pin、表情回复、搜索群聊（Bot/User 双身份）、历史记录（群聊 / P2P 私聊，支持 `--user-email` / `--user-id` 自动反查 p2p chat_id）、批量获取、资源下载、话题回复、**发送者名字自动解析**（输出顶层 `sender_names` 映射，覆盖退群成员） |
 | **群聊** | 创建、获取、更新、删除、分享链接、成员管理 |
 | **邮箱** | 收件箱分类/搜索、邮件详情（单条/批量/线程）、发送（默认草稿）、草稿管理、回复/全部回复/转发（需 User Token） |
 | **日历** | 日历列表、主日历、日程增删改查、搜索、回复邀请、参与者管理、忙闲查询、日程视图（agenda） |
@@ -358,8 +359,17 @@ feishu-cli msg search-chats --query "关键词"
 # 搜索群聊（User 身份，可搜到用户所在的群）
 feishu-cli msg search-chats --query "关键词" --user-access-token <token>
 
-# 获取历史消息（Bot 不在群内时使用 --user-access-token）
+# 获取群聊历史消息（Bot 不在群内时使用 --user-access-token）
 feishu-cli msg history --container-id <chat_id> --container-id-type chat
+
+# 获取和某人的私聊记录（邮箱入口，自动搜用户 + 反查 p2p chat_id）
+feishu-cli msg history --user-email user@example.com --page-size 50 -o json
+
+# 已知 open_id 时直接传
+feishu-cli msg history --user-id ou_xxx --page-size 50 -o json
+
+# 输出 JSON 自动携带顶层 sender_names 映射（open_id → 姓名），AI Agent 可直接引用
+# {"Items":[...], "sender_names":{"ou_abc":"张三","ou_def":"李四"}}
 
 # 转发消息
 feishu-cli msg forward <message_id> --receive-id <id> --receive-id-type email
@@ -714,8 +724,9 @@ feishu-cli sheet export <token> --format csv --sheet-id SHEET_ID -o output.csv
 
 # 用户
 feishu-cli user info <user_id>
-feishu-cli user search --email user@example.com
+feishu-cli user search --email user@example.com         # 邮箱查 user_id；带 User Token 时自动补 open_id + 姓名
 feishu-cli user search --mobile 13800138000
+feishu-cli user search --query "张三"                   # 按姓名/关键词模糊搜索，需 User Token
 feishu-cli user list --department-id DEPT_ID
 
 # 部门
