@@ -1,18 +1,17 @@
 ---
 name: feishu-cli-toolkit
 description: >-
-  飞书综合工具箱：电子表格（含导出 XLSX/CSV）、日历日程（含日程列表/agenda）、
-  任务管理、审批查询（含我的任务/重新打开/评论）、任务清单（含任务关联/成员管理）、
-  画板操作、PlantUML 图表、文件管理、素材上传下载、文档评论、知识库、
-  用户通讯录、文档附件下载。
-  当用户请求操作飞书表格、导出表格、查看日历、查看日程列表、创建任务、
-  查看我的任务、重新打开任务、任务评论、任务清单成员、查询审批定义或当前登录用户审批任务、
-  操作画板、生成 PlantUML、管理文件、上传素材、查看评论、查看知识库、查询用户信息、
-  查询部门、下载文档附件时使用。
-  注意：群聊浏览/管理请使用 feishu-cli-chat，搜索请使用 feishu-cli-search，
-  发送消息请使用 feishu-cli-msg，邮箱操作请使用 feishu-cli-mail，
-  云盘增强（分块上传/markdown 快捷导出/异步 resume/富文本评论）请使用 feishu-cli-drive，
-  多维表格请使用 feishu-cli-bitable，视频会议/妙记请使用 feishu-cli-vc。
+  飞书综合工具箱，覆盖 14 个模块：电子表格（含导出 XLSX/CSV）、日历日程（含 agenda）、
+  任务管理（task/subtask/member/reminder）、任务清单、审批查询（我的任务/重新打开/评论）、
+  画板操作、PlantUML 图表、文件管理、素材上传下载、文档评论、知识库、用户通讯录、
+  文档附件下载。当用户请求操作飞书表格、查看日历/日程、创建或查询任务、查询审批任务、
+  操作画板、生成 PlantUML、管理文件、上传素材、查看评论、查看知识库、查询用户或部门、
+  下载文档附件时使用。边界分诊：群聊管理 → feishu-cli-chat；搜索文档/消息/应用 →
+  feishu-cli-search；发消息/回复/转发 → feishu-cli-msg；构造 interactive 卡片 →
+  feishu-cli-card；邮箱收发 → feishu-cli-mail；云盘增强（分块上传/markdown 快捷导出/
+  异步 resume/富文本评论）→ feishu-cli-drive；多维表格 → feishu-cli-bitable；
+  视频会议/妙记 → feishu-cli-vc；文档读/写/导入/导出 → feishu-cli-{read,write,import,export}；
+  权限管理 → feishu-cli-perm；OAuth 登录/Token → feishu-cli-auth。
 argument-hint: <module> <command> [args]
 user-invocable: true
 allowed-tools: Bash, Read, Write

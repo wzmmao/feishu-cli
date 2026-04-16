@@ -7,7 +7,8 @@ description: >-
   当用户请求"导出文档"、"导出为 Markdown"、"转换为 Markdown"、"保存为 md"、
   "导出 PDF"、"导出 Word"、"下载文档"、"下载素材"、"下载文档图片"、
   "下载画板缩略图"、"导出表格"、"表格转 Markdown"时使用。
-  本技能专注于导出操作。从本地 DOCX 文件导入请使用 feishu-cli-import。
+  本技能专注于从飞书导出到本地。本地 Markdown 导入请用 feishu-cli-import；
+  本地 DOCX/XLSX 导入为云文档请用 feishu-cli-drive 的 drive import 命令。
 argument-hint: <document_id|node_token|url> [output_path]
 user-invocable: true
 allowed-tools: Bash, Read

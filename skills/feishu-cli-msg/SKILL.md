@@ -10,6 +10,9 @@ description: >-
   即使没有明确说"发送"，只要意图是把信息传达给某人，都应使用此技能。
   注意：Reaction/Pin/删除/获取消息详情/消息历史/搜索群聊/群聊管理
   请使用 feishu-cli-chat 技能（需 User Token）。
+  发送结构化或美观的 interactive 卡片（带折叠面板、图表、按钮组、人员卡等）
+  请先用 feishu-cli-card 构造 JSON（内置 7 个场景模板和 20+ 组件、配色布局规范，
+  避免手搓易错的 JSON），再回到本技能用 --msg-type interactive 发送。
 argument-hint: <receive_id> [--msg-type <type>]
 user-invocable: true
 allowed-tools: Bash, Read, Write

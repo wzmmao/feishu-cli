@@ -4,6 +4,8 @@ description: >-
   飞书邮箱（Mail）操作。查看邮件、发送邮件、回复、转发、管理草稿、批量获取、线程、过滤。
   当用户请求"发邮件"、"看邮件"、"查邮件"、"回复邮件"、"转发邮件"、"邮件草稿"、"收件箱"、
   "feishu mail"、"lark mail"、"未读邮件"时使用。
+  所有命令需要 User Access Token（先 feishu-cli auth login）。
+  首期限制：发送/回复/转发仅支持纯文本或 HTML body，暂不支持附件和 CID 内联图片。
 user-invocable: true
 allowed-tools: Bash, Read
 ---

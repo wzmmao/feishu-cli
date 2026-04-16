@@ -9,7 +9,8 @@ description: >-
   "带折叠面板的消息"、"飞书卡片"、"Lark card"、"构造卡片"时使用。
   即使用户只说"发个消息告诉 XX"，只要内容有结构（多字段 / 多链接 / 图表 / 状态），
   都应优先用本技能构造卡片而非纯文本。
-  构造出的 JSON 交给 feishu-cli-msg 通过 --msg-type interactive 发送。
+  构造出的 JSON 写入 /tmp/<name>-card.json，随后交给 feishu-cli-msg 用
+  --msg-type interactive 发送（msg 使用 App Token，无需 auth login）。
 argument-hint: <场景描述>
 user-invocable: true
 allowed-tools: Bash, Read, Write

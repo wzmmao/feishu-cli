@@ -5,6 +5,7 @@ description: >-
   大表格自动拆分、公式、Callout 高亮块。当用户请求"导入 Markdown"、"从 md 创建文档"、
   "从 md 文件创建文档"、"把 Markdown 转换到飞书"、"上传 Markdown"、"Markdown 转飞书"、
   "md 导入"、"批量导入"时使用。
+  注意：仅支持 Markdown 源文件。DOCX/XLSX 导入为云文档请使用 feishu-cli-drive 的 drive import。
 argument-hint: <markdown_file> [--title "标题"] [--verbose]
 user-invocable: true
 allowed-tools: Bash, Read

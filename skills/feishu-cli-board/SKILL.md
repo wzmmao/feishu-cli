@@ -8,6 +8,7 @@ description: >-
   也适用于：用户给出一组实体和关系，期望在飞书文档中生成可视化图表的场景。
   与 Mermaid 导入的区别：Mermaid 由飞书服务端自动排版，create-notes 可精确控制坐标、颜色、连线，
   适合需要精排的架构图和看板。
+  使用 App Token（应用身份），无需 auth login。
 argument-hint: "[whiteboard_id]"
 user-invocable: true
 allowed-tools: Bash, Read, Write
