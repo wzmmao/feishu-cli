@@ -104,13 +104,73 @@ feishu-cli doc media-insert <document_id> --file /path/to/report.pdf --type file
 ## 低层块操作
 
 ```bash
+# doc add：默认 --content-type json；--source-type file/content；可指定父块和插入位置
 feishu-cli doc add <document_id> content.md --content-type markdown --upload-images
+feishu-cli doc add <document_id> --content '[{"block_type":2,...}]' --source-type content
+feishu-cli doc add <document_id> doc.md --content-type markdown --block-id <parent_block_id> --index 0
+
 feishu-cli doc update <document_id> <block_id> --content-file update.json
-feishu-cli doc delete <document_id> --start-index 3 --end-index 5
+
+# doc delete：必须指定父块 ID + 索引范围（左闭右开），或用 --all 删全部子块；--force 跳过确认
+feishu-cli doc delete <document_id> <parent_block_id> --start 0 --end 3
+feishu-cli doc delete <document_id> <parent_block_id> --all --force
+
+# doc batch-update：默认 --source-type file；可传 --client-token（UUIDv4 幂等）和
+# --document-revision-id（乐观锁，默认 -1=最新；指定具体版本时如版本不匹配会失败）
 feishu-cli doc batch-update <document_id> updates.json --source-type file
+feishu-cli doc batch-update <document_id> updates.json \
+  --client-token "$(uuidgen)" \
+  --document-revision-id -1
 ```
 
 低层 JSON 需要熟悉飞书 Block 结构；普通章节编辑优先用 `content-update`。
+
+### `doc add-board` 添加画板块
+
+向文档插入一个空画板块（block_type=43），返回 `block_id` 和 `whiteboard_id`，后续可用 `feishu-cli board` 系列命令操作画板内容。
+
+| flag | 说明 | 默认 |
+|---|---|---|
+| `--parent-id` | 父块 ID | 空（文档根节点） |
+| `--index` | 插入位置索引 | -1（末尾） |
+| `--output, -o` | 输出格式 (json) | 文本 |
+
+```bash
+# 末尾添加，JSON 输出便于脚本提取 whiteboard_id
+feishu-cli doc add-board <document_id> -o json
+
+# 指定父块和位置
+feishu-cli doc add-board <document_id> --parent-id <block_id> --index 0
+```
+
+### `doc add-callout` 添加高亮块
+
+向文档插入一个 Callout 高亮块（block_type=19），并自动写入文本内容（API 会自动生成空子块，CLI 已处理为直接更新而非额外创建）。
+
+| `--callout-type` | 背景色 | 视觉含义 |
+|---|---|---|
+| `info`（默认） | 蓝色（6） | 信息提示，灯泡图标 |
+| `warning` | 黄色（4） | 警告提示 |
+| `error` | 红色（2） | 错误提示 |
+| `success` | 绿色（5） | 成功提示 |
+
+> 注：CLI 当前仅暴露 4 种 type；如需 CAUTION（橙=3）/IMPORTANT（紫=7）等其他 6 色 Callout，请用 Markdown `<callout type="CAUTION">...</callout>` 走 `doc import` / `content-update`。
+
+| flag | 说明 | 默认 |
+|---|---|---|
+| `--callout-type` | 类型 (info/warning/error/success) | info |
+| `--icon` | 自定义图标（emoji shortcode，如 `bulb` `fire`） | 空 |
+| `--parent-id` | 父块 ID | 空（文档根节点） |
+| `--index` | 插入位置索引 | -1（末尾） |
+| `--output, -o` | 输出格式 (json) | 文本 |
+
+```bash
+# 默认 info 蓝色
+feishu-cli doc add-callout <document_id> "这是一条提示信息"
+
+# 警告 + 自定义图标
+feishu-cli doc add-callout <document_id> "请注意" --callout-type warning --icon fire
+```
 
 ## 表格
 
@@ -126,6 +186,8 @@ Markdown 表格导入 docx 时：
 feishu-cli doc table insert-row DOC_ID TABLE_BLOCK_ID --index 1 --count 2
 feishu-cli doc table delete-rows DOC_ID TABLE_BLOCK_ID --start 1 --end 3
 feishu-cli doc table merge-cells DOC_ID TABLE_BLOCK_ID --row-start 0 --row-end 2 --col-start 0 --col-end 3
+# 取消合并：指定合并区域内任一单元格的行/列索引
+feishu-cli doc table unmerge-cells DOC_ID TABLE_BLOCK_ID --row 0 --col 0
 ```
 
 ## 扩展语法

@@ -35,6 +35,8 @@ allowed-tools: Bash(feishu-cli doc:*), Bash(feishu-cli perm:*), Bash(feishu-cli 
 
 **Markdown 作为中间态**：本地文档与飞书云文档之间通过 Markdown 格式进行转换。
 
+> **边界澄清**：本 skill 仅支持 Markdown 源文本导入。若需导入 Word/Excel 等二进制格式，请用 `feishu-cli doc import-file` 或 `feishu-cli-drive` skill 的 `drive import`。
+
 如果用户目标是“把 Markdown 里的表格变成飞书电子表格”，不要走 `doc import`，改用：
 
 ```bash
@@ -89,7 +91,7 @@ feishu-cli doc import ./document.md --title "带图文档" --upload-images
 
 ### 追加导入到已有文档
 
-`--document-id` 不会替换已有内容，只会把 Markdown 转换后的块追加到文档末尾。修改/覆盖已有内容请用 `feishu-cli doc content-update`。
+`--document-id` 不会替换已有内容，只会把 Markdown 转换后的块追加到文档末尾。修改/覆盖已有内容请用 `feishu-cli doc content-update`（详见 `feishu-cli-write` skill）。
 
 1. **执行追加导入**
    ```bash

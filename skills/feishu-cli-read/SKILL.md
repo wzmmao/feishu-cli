@@ -34,6 +34,140 @@ feishu-cli wiki export <node_token_or_url> --output /tmp/feishu_wiki.md --downlo
 feishu-cli sheet export <spreadsheet_token_or_url> --format markdown --output /tmp/feishu_sheet.md
 ```
 
+## 获取文档元信息（doc get）
+
+读取文档基本信息（document_id、revision_id、title），用于在 export 之前确认目标、或拿 revision_id 作为后续 API 调用参数。同样走"User 优先 + Tenant 兜底"。
+
+| Flag | 默认值 | 说明 |
+| --- | --- | --- |
+| `<document_id>` | 必填 | 文档 ID 或 URL（`https://xxx.feishu.cn/docx/<id>`） |
+| `-o, --output` | text | 输出格式，可选 `json` |
+| `--user-access-token` | 空 | 手动覆盖 User Token；不填则自动从 `~/.feishu-cli/token.json` 读取 |
+
+```bash
+# 文本摘要
+feishu-cli doc get ABC123def456
+
+# JSON 输出（脚本里拿 revision_id / title）
+feishu-cli doc get ABC123def456 -o json
+
+# 从 URL 直接读
+feishu-cli doc get https://xxx.feishu.cn/docx/ABC123def456
+```
+
+## 列出文档所有块（doc blocks）
+
+`doc export` 拿不到结构化块树时（例如要分析每个块的类型、定位特定块、查 raw API 响应），用 `doc blocks`。默认列出第一页（500 块），加 `--all` 自动分页拉完。
+
+| Flag | 默认值 | 说明 |
+| --- | --- | --- |
+| `<document_id>` | 必填 | 文档 ID（不接 URL，请先 `doc get` 拿 ID） |
+| `--all` | false | 自动分页获取所有块（覆盖 `--page-size` / `--page-token`） |
+| `--page-size` | 500 | 单页块数量 |
+| `--page-token` | 空 | 续页 token |
+| `--document-revision-id` | -1 | 文档版本（-1 = 最新） |
+| `--raw` | false | 输出飞书 API 原始 JSON（含未解析字段） |
+| `--user-id-type` | open_id | 用户 ID 类型（open_id/union_id/user_id） |
+| `-o, --output` | text | 输出格式，可选 `json`（CLI 归一化结构） |
+| `--user-access-token` | 空 | 手动覆盖 User Token |
+
+```bash
+# 默认：第一页，文本摘要
+feishu-cli doc blocks ABC123def456
+
+# 全量分页 + 归一化 JSON
+feishu-cli doc blocks ABC123def456 --all -o json
+
+# 拿 API 原始响应（含未识别块类型的 raw 字段）
+feishu-cli doc blocks ABC123def456 --all --raw > /tmp/blocks_raw.json
+```
+
+## 知识库读类（wiki get / nodes / spaces）
+
+知识库的"目录结构遍历三件套"，配合 `wiki export` 完成"找到节点 → 读内容"的链路。三个命令都走"User 优先 + Tenant 兜底"。
+
+### wiki get — 查节点元信息
+
+| Flag | 默认值 | 说明 |
+| --- | --- | --- |
+| `<node_token \| url>` | 必填 | 节点 Token 或 wiki URL |
+| `-o, --output` | text | 输出格式，可选 `json` |
+| `--user-access-token` | 空 | 手动覆盖 User Token |
+
+返回字段：`space_id` / `node_token` / `obj_token`（用于文档 API） / `obj_type`（docx/sheet/bitable/...） / `title` / `has_child`。
+
+### wiki nodes — 列出空间或父节点的子节点
+
+| Flag | 默认值 | 说明 |
+| --- | --- | --- |
+| `<space_id>` | 必填 | 知识空间 ID（由 `wiki get` 或 `wiki spaces` 得到） |
+| `--parent` | 空 | 父节点 Token；不填 = 列空间根节点 |
+| `--page-size` | 50 | 单页节点数量 |
+| `-o, --output` | text | 输出格式，可选 `json` |
+| `--user-access-token` | 空 | 手动覆盖 User Token |
+
+### wiki spaces — 列出当前身份可见的所有知识空间
+
+| Flag | 默认值 | 说明 |
+| --- | --- | --- |
+| `--page-size` | 50 | 单页空间数量 |
+| `-o, --output` | text | 输出格式，可选 `json` |
+| `--user-access-token` | 空 | 手动覆盖 User Token |
+
+```bash
+# 1. 列空间
+feishu-cli wiki spaces
+
+# 2. 看某节点信息，记下 space_id
+feishu-cli wiki get https://xxx.feishu.cn/wiki/Ad8Iw0oz3iSp4kkIi7QctVhin3e
+
+# 3. 列该节点下子文档
+feishu-cli wiki nodes 7012345678901234567 --parent Ad8Iw0oz3iSp4kkIi7QctVhin3e
+
+# 4. 找到目标后用 wiki export 读内容
+feishu-cli wiki export <child_node_token> -o /tmp/child.md
+```
+
+## 电子表格读类（sheet read / list-sheets）
+
+`sheet export --format markdown` 适合"整表导出阅读"；要按精确范围读单元格、或先列出工作表元信息，用下面两个命令。
+
+### sheet list-sheets — 列出电子表格的所有工作表
+
+| Flag | 默认值 | 说明 |
+| --- | --- | --- |
+| `<spreadsheet_token>` | 必填 | 电子表格 Token 或 URL |
+| `-o, --output` | text | 输出格式，可选 `json` |
+| `--user-access-token` | 空 | 手动覆盖 User Token |
+
+返回 `sheet_id` / `title` / 索引 / 隐藏状态，配合 `sheet read` 的 `SheetID!A1:C10` 范围语法用。
+
+### sheet read — 读指定范围单元格
+
+| Flag | 默认值 | 说明 |
+| --- | --- | --- |
+| `<spreadsheet_token>` | 必填 | 电子表格 Token 或 URL |
+| `<range>` | 必填 | 范围，例如 `SheetID!A1:C10`、`A1:B2`（配合 `--sheet-id`）、`Sheet1!A:C` 整列 |
+| `--sheet-id` | 空 | 当 range 不带 SheetID 前缀时必填 |
+| `--value-render` | 空 | 单元格值渲染：`ToString` / `FormattedValue` / `Formula` / `UnformattedValue` |
+| `--datetime-render` | 空 | 日期渲染：`FormattedString`（不填返回数字时间戳） |
+| `-o, --output` | text | 输出格式，可选 `json` |
+| `--user-access-token` | 空 | 手动覆盖 User Token |
+
+```bash
+# 列出所有工作表
+feishu-cli sheet list-sheets shtcnxxxxxx
+
+# 读单个范围（推荐先 list-sheets 拿 sheet_id）
+feishu-cli sheet read shtcnxxxxxx "0b12ab!A1:C10"
+
+# 用工作表 ID 简化范围
+feishu-cli sheet read shtcnxxxxxx "A1:C10" --sheet-id 0b12ab -o json
+
+# 拿公式而非求值结果
+feishu-cli sheet read shtcnxxxxxx "Sheet1!A1:B20" --value-render Formula
+```
+
 ## 执行流程
 
 1. **解析参数**
@@ -53,14 +187,15 @@ feishu-cli sheet export <spreadsheet_token_or_url> --format markdown --output /t
 
    文档内嵌电子表格块默认会自动展开为 Markdown 表格，便于直接阅读和分析；如果要保留 `<sheet .../>` 标签用于 roundtrip，追加 `--expand-sheets=false`。
 
-   `doc export` 会自动解析 User Access Token（如已登录），解析优先级：
+   `doc export` 会自动解析 User Access Token（如已登录），解析优先级（与 `cmd/utils.go::resolveOptionalUserTokenWithFallback` + `internal/auth/resolve.go::ResolveUserAccessToken` 实现完全一致）：
 
-   1. `--user-access-token` 命令行参数
-   2. `FEISHU_USER_ACCESS_TOKEN` 环境变量
-   3. `~/.feishu-cli/token.json`（通过 `auth login` 保存）
-   4. `config.yaml` 中的 `user_access_token`
+   1. `--user-access-token` 命令行参数（若该 token 等于 token.json 中已过期的 access_token，且 refresh_token 仍有效，自动刷新）
+   2. `FEISHU_USER_ACCESS_TOKEN` 环境变量（同样支持本机身份延伸的自动刷新）
+   3. `~/.feishu-cli/token.json`（通过 `auth login` 保存；access_token 过期则用 refresh_token 自动续期并写回）
+   4. `config.yaml` 中的 `user_access_token`（静态配置，不会自动刷新）
+   5. **App Token 兜底**（资源 API 也会接受，以租户身份访问；遇到 1770032/forbidden 等错误时说明该文档对 App 不可见，必须走前 4 步拿到 User Token）
 
-   找到 User Token 时使用用户身份访问，未找到时回退为 App Access Token（租户身份）。
+   找到 User Token 时使用用户身份访问，未找到或解析失败时回退为 App Access Token（租户身份）。
 
    若遇到 `code=1770032 forBidden`（App 无权限且未登录）或 `code=99991679 Unauthorized`（User Token 缺少 scope），需先在飞书开放平台为应用开通 `docx:document:readonly`，然后完成 User Token 授权：
 

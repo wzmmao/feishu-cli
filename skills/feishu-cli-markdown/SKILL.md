@@ -215,10 +215,31 @@ feishu-cli doc import ./design.md --title "设计稿" --upload-images
 
 - **默认 User Access Token**：所有 `markdown` 命令未登录时统一提示 `feishu-cli auth login`
 - **不做 Markdown 转换**：本命令组保留 `.md` 字节流不变，**不**做飞书 docx 块转换，**不**触发图床、画板渲染、Callout 等增强逻辑——需要这些走 `doc import`
-- **强制 `.md` 后缀**：`create --name` 和 `overwrite --name` 都校验 `.md` 结尾
-- **`upload_all` 单次 ≤ 20MB**：大文件覆盖暂不支持
-- **空内容拒绝**：要清空走 `overwrite --content " "`
+- **`upload_all` 单次 ≤ 20MB**：`create` / `overwrite` 共用 endpoint，大文件覆盖未实现，绕路走 `drive upload`（创建新 file_token）
 - **`fetch` 输出参数**：路径走 `--output-path`，格式走 `-o/--output`
+
+> `.md` 后缀强制、空内容拒绝两条已经在「核心 flag」与「踩坑」章节出现，这里不再重复，详见 [`overwrite` flag 表](#3-markdown-overwrite--覆盖已有-md保-file_token) 和 [`踩坑 §3/§4`](#3-md-后缀强制校验)。
+
+## 常见错误
+
+实际报错示例（参 `cmd/markdown_overwrite.go` + `internal/client/markdown.go:OverwriteFileWithToken`）：
+
+| 触发条件 | 错误信息 | 排查方向 |
+|---|---|---|
+| User Token 对目标文件无编辑权限 | `覆盖文件失败: code=<非 0>, msg=<飞书返回>`（常见 `1061004 forbidden`、`1061045 no permission`） | 在飞书云盘右键文件 → 共享 → 给当前用户加「可编辑」；或换文件所有者的 token；或检查 scope `drive:file:upload` 是否已授予 |
+| 文件大小超 20MB（`--content`） | `--content 大小 <N> 字节超过 20MB API 上限` | 切分文件或换 `drive upload`（会创建新 file_token，分享链接失效） |
+| 文件大小超 20MB（`--content-file`） | `--content-file 大小 <N> 字节超过 20MB API 上限，请切分或用多次 fetch+overwrite` | 同上；CLI 在读盘前 `os.Stat` 已拦截，不浪费上传带宽 |
+| `--name` 不以 `.md` 结尾 | `--name 必须以 .md 结尾，得到 "xxx.txt"` | 改 `.md` 后缀；`.mdx` / `.markdown` 必须走 `drive upload` |
+| `--content-file` 路径不存在 | `读取本地文件失败: open <path>: no such file or directory` | 检查路径是否相对当前目录；建议传绝对路径 |
+| `--content-file` 是目录 | `--content-file 必须指向文件，不是目录` | 指向具体 `.md` 文件 |
+| 既给 `--content` 又给 `--content-file` | `--content 与 --content-file 不能同时使用` | 二选一 |
+| 都没给 | `请提供 --content 或 --content-file` | 至少传一个 |
+| `--content` 模式漏 `--name` | `使用 --content 时必须提供 --name 指定远端文件名（保留原名请加 --name <现有文件名>.md）` | 显式 `--name existing.md`（不会自动 fallback `fileToken.md`） |
+| 内容为空字节 | `Markdown 内容为空，不支持把 .md 覆盖为空文件` | 要清空语义传 `--content " "`（占位空格） |
+| HTTP 层异常 | `覆盖文件失败: HTTP <status>, body: <raw>` | 网络/代理问题，附带原始 body 便于排查 |
+| 响应解析失败 | `解析覆盖响应失败: <json error>` | 飞书侧返回非 JSON（极罕见，通常网关错误页） |
+
+> 权限不足时飞书 API 直接返回 `code != 0` 的业务错（如 `1061004`、`1061045`），CLI 层透传 `msg` 字段；若同时缺 scope 会在 `auth check` 阶段就拦截，建议执行前先跑 `feishu-cli auth check --scope "drive:file:upload"`。
 
 ## 与老命令的对照
 
