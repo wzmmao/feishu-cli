@@ -172,6 +172,43 @@ func TestPrependReferenceQuote(t *testing.T) {
 	}
 }
 
+func TestBuildExportConvertOptionsIncludesOutputMarkdownPath(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("download-images", true, "")
+	cmd.Flags().String("assets-dir", "./assets", "")
+	cmd.Flags().Bool("expand-sheets", true, "")
+	cmd.Flags().Bool("expand-mentions", true, "")
+	cmd.Flags().String("domainUrl", "https://example.feishu.cn", "")
+
+	if err := cmd.Flags().Set("download-images", "true"); err != nil {
+		t.Fatalf("set download-images: %v", err)
+	}
+
+	options := buildExportConvertOptions(
+		cmd,
+		"docxToken",
+		"userToken",
+		"./tree-assets/Team/Plan",
+		"./backup/Team/Plan.md",
+	)
+
+	if !options.DownloadImages {
+		t.Fatal("DownloadImages should be true")
+	}
+	if options.AssetsDir != "./tree-assets/Team/Plan" {
+		t.Fatalf("AssetsDir = %q, want %q", options.AssetsDir, "./tree-assets/Team/Plan")
+	}
+	if options.OutputMarkdownPath != "./backup/Team/Plan.md" {
+		t.Fatalf("OutputMarkdownPath = %q, want %q", options.OutputMarkdownPath, "./backup/Team/Plan.md")
+	}
+	if options.DocumentID != "docxToken" {
+		t.Fatalf("DocumentID = %q, want %q", options.DocumentID, "docxToken")
+	}
+	if options.UserAccessToken != "userToken" {
+		t.Fatalf("UserAccessToken = %q, want %q", options.UserAccessToken, "userToken")
+	}
+}
+
 func createExportMentionUserBlocks(userID string) []*larkdocx.Block {
 	blockType := int(converter.BlockTypeText)
 	return []*larkdocx.Block{

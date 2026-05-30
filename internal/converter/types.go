@@ -98,6 +98,7 @@ type SheetDataProvider func(spreadsheetToken, sheetID, userAccessToken string) (
 type ConvertOptions struct {
 	DownloadImages      bool
 	AssetsDir           string
+	OutputMarkdownPath  string // 导出的 Markdown 文件路径（用于生成相对资源引用，空表示保持原路径）
 	UploadImages        bool
 	DocumentID          string
 	DomainURL           string // 导出链接使用的域名（例如 https://xxx.feishu.cn）

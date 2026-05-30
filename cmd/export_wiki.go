@@ -72,11 +72,22 @@ var exportWikiCmd = &cobra.Command{
 		fmt.Printf("文档类型: %s\n", node.ObjType)
 		fmt.Printf("文档 Token: %s\n", node.ObjToken)
 
+		// 先确定输出路径，供图片链接按 Markdown 目录计算相对路径
+		outputPath, _ := cmd.Flags().GetString("output")
+		if outputPath == "" {
+			// 使用标题作为文件名
+			safeTitle := node.Title
+			if safeTitle == "" {
+				safeTitle = nodeToken
+			}
+			outputPath = fmt.Sprintf("/tmp/%s.md", safeTitle)
+		}
+
 		var markdown string
 
 		switch node.ObjType {
 		case "docx":
-			md, err := exportDocxToMarkdown(node.ObjToken, userAccessToken, cmd)
+			md, err := exportDocxToMarkdown(node.ObjToken, userAccessToken, cmd, outputPath)
 			if err != nil {
 				return err
 			}
@@ -96,16 +107,6 @@ var exportWikiCmd = &cobra.Command{
 		markdown = prependReferenceQuote(markdown, wikiURL)
 
 		// 5. 保存文件
-		outputPath, _ := cmd.Flags().GetString("output")
-		if outputPath == "" {
-			// 使用标题作为文件名
-			safeTitle := node.Title
-			if safeTitle == "" {
-				safeTitle = nodeToken
-			}
-			outputPath = fmt.Sprintf("/tmp/%s.md", safeTitle)
-		}
-
 		// 路径安全检查
 		if err := validateOutputPath(outputPath, ""); err != nil {
 			return fmt.Errorf("输出路径不安全: %w", err)
@@ -130,17 +131,27 @@ var exportWikiCmd = &cobra.Command{
 }
 
 // exportDocxToMarkdown 导出 docx 类型文档为 Markdown
-func exportDocxToMarkdown(docToken, userAccessToken string, cmd *cobra.Command) (string, error) {
-	return exportDocxToMarkdownWithAssets(docToken, userAccessToken, cmd, "")
+func exportDocxToMarkdown(docToken, userAccessToken string, cmd *cobra.Command, outputMarkdownPath string) (string, error) {
+	return exportDocxToMarkdownWithAssets(docToken, userAccessToken, cmd, "", outputMarkdownPath)
 }
 
-func exportDocxToMarkdownWithAssets(docToken, userAccessToken string, cmd *cobra.Command, assetsDirOverride string) (string, error) {
+func exportDocxToMarkdownWithAssets(docToken, userAccessToken string, cmd *cobra.Command, assetsDirOverride string, outputMarkdownPath string) (string, error) {
 	fmt.Println("正在获取文档内容...")
 	blocks, err := client.GetAllBlocksWithToken(docToken, userAccessToken)
 	if err != nil {
 		return "", fmt.Errorf("获取块失败: %w", err)
 	}
 
+	options := buildExportConvertOptions(cmd, docToken, userAccessToken, assetsDirOverride, outputMarkdownPath)
+	conv := newExportBlockToMarkdownConverter(blocks, options, &FeishuUserResolver{})
+	md, err := conv.Convert()
+	if err != nil {
+		return "", fmt.Errorf("转换为 Markdown 失败: %w", err)
+	}
+	return md, nil
+}
+
+func buildExportConvertOptions(cmd *cobra.Command, docToken, userAccessToken, assetsDirOverride, outputMarkdownPath string) converter.ConvertOptions {
 	downloadImages, _ := cmd.Flags().GetBool("download-images")
 	assetsDir, _ := cmd.Flags().GetString("assets-dir")
 	expandSheets := true
@@ -154,23 +165,18 @@ func exportDocxToMarkdownWithAssets(docToken, userAccessToken string, cmd *cobra
 	domainURL, _ := cmd.Flags().GetString("domainUrl")
 	cfg := config.Get()
 
-	options := converter.ConvertOptions{
-		DocumentID:      docToken,
-		DomainURL:       domainURL,
-		DownloadImages:  downloadImages,
-		AssetsDir:       assetsDir,
-		UserAccessToken: userAccessToken,
-		Debug:           cfg.Debug,
-		ExpandMentions:  expandMentions,
-		MentionDocAsLink: true,
-		ExpandSheets:    expandSheets,
+	return converter.ConvertOptions{
+		DocumentID:         docToken,
+		DomainURL:          domainURL,
+		DownloadImages:     downloadImages,
+		AssetsDir:          assetsDir,
+		OutputMarkdownPath: outputMarkdownPath,
+		UserAccessToken:    userAccessToken,
+		Debug:              cfg.Debug,
+		ExpandMentions:     expandMentions,
+		MentionDocAsLink:   true,
+		ExpandSheets:       expandSheets,
 	}
-	conv := newExportBlockToMarkdownConverter(blocks, options, &FeishuUserResolver{})
-	md, err := conv.Convert()
-	if err != nil {
-		return "", fmt.Errorf("转换为 Markdown 失败: %w", err)
-	}
-	return md, nil
 }
 
 func readExpandMentionsFlag(cmd *cobra.Command) bool {

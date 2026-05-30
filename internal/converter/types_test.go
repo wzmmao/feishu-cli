@@ -153,10 +153,11 @@ func TestImageInfo(t *testing.T) {
 
 func TestConvertOptions(t *testing.T) {
 	opts := ConvertOptions{
-		DownloadImages: true,
-		AssetsDir:      "./assets",
-		UploadImages:   true,
-		DocumentID:     "docx_abc123",
+		DownloadImages:     true,
+		AssetsDir:          "./assets",
+		OutputMarkdownPath: "./docs/plan.md",
+		UploadImages:       true,
+		DocumentID:         "docx_abc123",
 	}
 
 	if !opts.DownloadImages {
@@ -164,6 +165,9 @@ func TestConvertOptions(t *testing.T) {
 	}
 	if opts.AssetsDir != "./assets" {
 		t.Errorf("ConvertOptions.AssetsDir = %q, 期望 %q", opts.AssetsDir, "./assets")
+	}
+	if opts.OutputMarkdownPath != "./docs/plan.md" {
+		t.Errorf("ConvertOptions.OutputMarkdownPath = %q, 期望 %q", opts.OutputMarkdownPath, "./docs/plan.md")
 	}
 	if !opts.UploadImages {
 		t.Error("ConvertOptions.UploadImages 应为 true")
@@ -181,6 +185,9 @@ func TestConvertOptionsDefaults(t *testing.T) {
 	}
 	if opts.AssetsDir != "" {
 		t.Errorf("ConvertOptions.AssetsDir 默认值应为空, 得到 %q", opts.AssetsDir)
+	}
+	if opts.OutputMarkdownPath != "" {
+		t.Errorf("ConvertOptions.OutputMarkdownPath 默认值应为空, 得到 %q", opts.OutputMarkdownPath)
 	}
 	if opts.UploadImages != false {
 		t.Error("ConvertOptions.UploadImages 默认值应为 false")

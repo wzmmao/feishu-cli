@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1282,5 +1283,33 @@ func TestConvertWithMultipleStyleCombinations(t *testing.T) {
 				t.Errorf("convertTextElements() = %q, should contain 'text'", got)
 			}
 		})
+	}
+}
+
+func TestMarkdownAssetPathRelativeToOutputMarkdown(t *testing.T) {
+	converter := &BlockToMarkdown{
+		options: ConvertOptions{
+			OutputMarkdownPath: filepath.Join("backup", "Team", "Plan.md"),
+		},
+	}
+
+	got := converter.markdownAssetPath(filepath.Join("backup", "assets", "Team", "Plan", "image_1.png"))
+	want := filepath.ToSlash(filepath.Join("..", "assets", "Team", "Plan", "image_1.png"))
+	if got != want {
+		t.Fatalf("markdownAssetPath() = %q, want %q", got, want)
+	}
+}
+
+func TestMarkdownAssetPathFallsBackWhenRelFails(t *testing.T) {
+	converter := &BlockToMarkdown{
+		options: ConvertOptions{
+			OutputMarkdownPath: "/tmp/doc.md",
+		},
+	}
+
+	got := converter.markdownAssetPath(filepath.Join("assets", "image_1.png"))
+	want := filepath.ToSlash(filepath.Join("assets", "image_1.png"))
+	if got != want {
+		t.Fatalf("markdownAssetPath() fallback = %q, want %q", got, want)
 	}
 }

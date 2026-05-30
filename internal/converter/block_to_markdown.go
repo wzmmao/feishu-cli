@@ -792,7 +792,7 @@ func (c *BlockToMarkdown) convertImage(block *larkdocx.Block) (string, error) {
 		tmpURL, urlErr := client.GetMediaTempURL(token, dlOpts)
 		if urlErr == nil {
 			if dlErr := client.DownloadFromURL(tmpURL, localPath); dlErr == nil {
-				return fmt.Sprintf("![%s](%s)\n", alt, localPath), nil
+				return fmt.Sprintf("![%s](%s)\n", alt, c.markdownAssetPath(localPath)), nil
 			} else if c.options.Debug {
 				fmt.Fprintf(os.Stderr, "[Debug] 图片下载失败 (URL方式): %v\n", dlErr)
 			}
@@ -802,7 +802,7 @@ func (c *BlockToMarkdown) convertImage(block *larkdocx.Block) (string, error) {
 
 		// 方式二：SDK 直接下载
 		if sdkErr := client.DownloadMedia(token, localPath, dlOpts); sdkErr == nil {
-			return fmt.Sprintf("![%s](%s)\n", alt, localPath), nil
+			return fmt.Sprintf("![%s](%s)\n", alt, c.markdownAssetPath(localPath)), nil
 		} else if c.options.Debug {
 			fmt.Fprintf(os.Stderr, "[Debug] 图片SDK下载失败: %v\n", sdkErr)
 		}
@@ -1069,7 +1069,7 @@ func (c *BlockToMarkdown) convertVideoFile(token, name string, viewType *int) (s
 		dlOpts := client.DownloadMediaOptions{UserAccessToken: c.options.UserAccessToken, DocToken: c.options.DocumentID}
 		if tmpURL, err := client.GetMediaTempURL(token, dlOpts); err == nil {
 			if dlErr := client.DownloadFromURL(tmpURL, localPath); dlErr == nil {
-				attrs = appendVideoMetadata(append(attrs, fmt.Sprintf("src=\"%s\"", localPath)), name, viewType)
+				attrs = appendVideoMetadata(append(attrs, fmt.Sprintf("src=\"%s\"", c.markdownAssetPath(localPath))), name, viewType)
 				return fmt.Sprintf("<video %s></video>\n", strings.Join(attrs, " ")), nil
 			} else if c.options.Debug {
 				fmt.Fprintf(os.Stderr, "[Debug] 视频下载失败 (URL方式): %v\n", dlErr)
@@ -1078,7 +1078,7 @@ func (c *BlockToMarkdown) convertVideoFile(token, name string, viewType *int) (s
 			fmt.Fprintf(os.Stderr, "[Debug] 获取视频临时URL失败: %v\n", err)
 		}
 		if err := client.DownloadMedia(token, localPath, dlOpts); err == nil {
-			attrs = appendVideoMetadata(append(attrs, fmt.Sprintf("src=\"%s\"", localPath)), name, viewType)
+			attrs = appendVideoMetadata(append(attrs, fmt.Sprintf("src=\"%s\"", c.markdownAssetPath(localPath))), name, viewType)
 			return fmt.Sprintf("<video %s></video>\n", strings.Join(attrs, " ")), nil
 		} else if c.options.Debug {
 			fmt.Fprintf(os.Stderr, "[Debug] 视频SDK下载失败: %v\n", err)
@@ -1133,6 +1133,30 @@ func (c *BlockToMarkdown) reserveUniqueVideoFilename(filename string) string {
 		}
 		candidate = fmt.Sprintf("%s_%d%s", base, i, ext)
 	}
+}
+
+// markdownAssetPath 将资源文件路径转换为 Markdown 可用路径。
+// 当 OutputMarkdownPath 已知时，返回相对当前 Markdown 文件目录的路径；
+// 否则保持原始路径（仅统一为 '/' 分隔符）。
+func (c *BlockToMarkdown) markdownAssetPath(assetPath string) string {
+	if assetPath == "" {
+		return ""
+	}
+
+	cleanAssetPath := filepath.Clean(assetPath)
+	if c.options.OutputMarkdownPath == "" {
+		return filepath.ToSlash(cleanAssetPath)
+	}
+
+	mdDir := filepath.Dir(filepath.Clean(c.options.OutputMarkdownPath))
+	relPath, err := filepath.Rel(mdDir, cleanAssetPath)
+	if err != nil {
+		return filepath.ToSlash(cleanAssetPath)
+	}
+	if relPath == "." {
+		return filepath.ToSlash(filepath.Base(cleanAssetPath))
+	}
+	return filepath.ToSlash(relPath)
 }
 
 // IsVideoFilename reports whether name uses an extension that should roundtrip as a video file.
@@ -1307,7 +1331,7 @@ func (c *BlockToMarkdown) convertBoard(block *larkdocx.Block) (string, error) {
 		localPath := filepath.Join(c.options.AssetsDir, filename)
 
 		if err := client.GetBoardImage(token, localPath, c.options.UserAccessToken); err == nil {
-			return fmt.Sprintf("![画板](%s)\n", localPath), nil
+			return fmt.Sprintf("![画板](%s)\n", c.markdownAssetPath(localPath)), nil
 		} else if c.options.Debug {
 			fmt.Fprintf(os.Stderr, "[Debug] 画板下载失败: %v\n", err)
 		}

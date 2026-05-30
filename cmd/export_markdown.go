@@ -63,17 +63,18 @@ var exportMarkdownCmd = &cobra.Command{
 		// Convert to Markdown
 		cfg := config.Get()
 		options := converter.ConvertOptions{
-			DownloadImages:  downloadImages,
-			AssetsDir:       assetsDir,
-			DocumentID:      documentID,
-			DomainURL:       domainURL,
-			UserAccessToken: userAccessToken,
-			Debug:           cfg.Debug,
-			FrontMatter:     frontMatter,
-			Highlight:       highlight,
-			ExpandMentions:  expandMentions,
-			MentionDocAsLink: true,
-			ExpandSheets:    expandSheets,
+			DownloadImages:     downloadImages,
+			AssetsDir:          assetsDir,
+			OutputMarkdownPath: output,
+			DocumentID:         documentID,
+			DomainURL:          domainURL,
+			UserAccessToken:    userAccessToken,
+			Debug:              cfg.Debug,
+			FrontMatter:        frontMatter,
+			Highlight:          highlight,
+			ExpandMentions:     expandMentions,
+			MentionDocAsLink:   true,
+			ExpandSheets:       expandSheets,
 		}
 
 		var conv *converter.BlockToMarkdown

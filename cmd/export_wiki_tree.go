@@ -140,7 +140,7 @@ var exportWikiTreeCmd = &cobra.Command{
 			}
 
 			assetsDirOverride := wikiTreeNodeAssetsDir(cmd, outputDir, job)
-			markdown, err := exportWikiNodeMarkdown(job.Node, userAccessToken, cmd, assetsDirOverride)
+			markdown, err := exportWikiNodeMarkdown(job.Node, userAccessToken, cmd, assetsDirOverride, job.OutputPath)
 			if err != nil {
 				stats.Failed++
 				stats.Failures = append(stats.Failures, treeFailure{
@@ -366,10 +366,10 @@ func fileExistsAndNonEmpty(path string) bool {
 }
 
 // exportWikiNodeMarkdown 复用现有 export_wiki.go 里的转换逻辑，根据 obj_type 分发。
-func exportWikiNodeMarkdown(node *client.WikiNode, userAccessToken string, cmd *cobra.Command, assetsDirOverride string) (string, error) {
+func exportWikiNodeMarkdown(node *client.WikiNode, userAccessToken string, cmd *cobra.Command, assetsDirOverride string, outputMarkdownPath string) (string, error) {
 	switch node.ObjType {
 	case "docx":
-		return exportDocxToMarkdownWithAssets(node.ObjToken, userAccessToken, cmd, assetsDirOverride)
+		return exportDocxToMarkdownWithAssets(node.ObjToken, userAccessToken, cmd, assetsDirOverride, outputMarkdownPath)
 	case "sheet":
 		return exportSheetToMarkdown(node.ObjToken, node.Title, userAccessToken)
 	default:
