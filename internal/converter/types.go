@@ -100,12 +100,14 @@ type ConvertOptions struct {
 	AssetsDir           string
 	UploadImages        bool
 	DocumentID          string
+	DomainURL           string // 导出链接使用的域名（例如 https://xxx.feishu.cn）
 	UserAccessToken     string // User Access Token，用于下载图片和画板等需要权限的资源
 	Debug               bool   // 为 true 时，输出下载失败等调试信息到 stderr
 	DegradeDeepHeadings bool   // 为 true 时，Heading 7-9 输出为粗体段落而非 ######
 	FrontMatter         bool   // 为 true 时，导出时添加 YAML front matter
 	Highlight           bool   // 为 true 时，导出文本颜色和背景色为 HTML span
 	ExpandMentions      bool   // 导出时展开 @用户为友好格式（默认 false，CLI 默认 true）
+	MentionDocAsLink    bool   // 导出 mention-doc 为标准 Markdown 链接
 	ExpandSheets        bool   // 导出时展开内嵌电子表格为 Markdown 表格
 	SheetDataProvider   SheetDataProvider
 }

@@ -649,6 +649,35 @@ func TestConvertTextElements(t *testing.T) {
 			want:    `<mention-doc token="sheetXXX" type="sheet">表格</mention-doc>`,
 		},
 		{
+			name: "MentionDoc导出为Markdown链接",
+			elements: []*larkdocx.TextElement{
+				{MentionDoc: &larkdocx.MentionDoc{
+					Title: strPtr("方案文档"),
+					Token: strPtr("doxcnXXX"),
+				}},
+			},
+			options: ConvertOptions{
+				MentionDocAsLink: true,
+				DomainURL:        "https://oxl611w1w1.feishu.cn/",
+			},
+			want: `[方案文档](https://oxl611w1w1.feishu.cn/docx/doxcnXXX)`,
+		},
+		{
+			name: "MentionDoc导出为Markdown链接-wiki类型",
+			elements: []*larkdocx.TextElement{
+				{MentionDoc: &larkdocx.MentionDoc{
+					Title:   strPtr("平台设计"),
+					Token:   strPtr("wikcnXXX"),
+					ObjType: intPtr(16),
+				}},
+			},
+			options: ConvertOptions{
+				MentionDocAsLink: true,
+				DomainURL:        "oxl611w1w1.feishu.cn",
+			},
+			want: `[平台设计](https://oxl611w1w1.feishu.cn/wiki/wikcnXXX)`,
+		},
+		{
 			name: "Link URL解码",
 			elements: []*larkdocx.TextElement{
 				{TextRun: &larkdocx.TextRun{

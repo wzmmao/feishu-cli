@@ -91,6 +91,10 @@ var exportWikiCmd = &cobra.Command{
 			return fmt.Errorf("暂不支持导出 %s 类型的文档，目前仅支持 docx、sheet", node.ObjType)
 		}
 
+		domainURL, _ := cmd.Flags().GetString("domainUrl")
+		wikiURL := buildWikiReferenceURL(args[0], nodeToken, domainURL)
+		markdown = prependReferenceQuote(markdown, wikiURL)
+
 		// 5. 保存文件
 		outputPath, _ := cmd.Flags().GetString("output")
 		if outputPath == "" {
@@ -147,15 +151,18 @@ func exportDocxToMarkdownWithAssets(docToken, userAccessToken string, cmd *cobra
 		assetsDir = assetsDirOverride
 	}
 	expandMentions := readExpandMentionsFlag(cmd)
+	domainURL, _ := cmd.Flags().GetString("domainUrl")
 	cfg := config.Get()
 
 	options := converter.ConvertOptions{
 		DocumentID:      docToken,
+		DomainURL:       domainURL,
 		DownloadImages:  downloadImages,
 		AssetsDir:       assetsDir,
 		UserAccessToken: userAccessToken,
 		Debug:           cfg.Debug,
 		ExpandMentions:  expandMentions,
+		MentionDocAsLink: true,
 		ExpandSheets:    expandSheets,
 	}
 	conv := newExportBlockToMarkdownConverter(blocks, options, &FeishuUserResolver{})
@@ -222,5 +229,6 @@ func init() {
 	exportWikiCmd.Flags().String("assets-dir", "./assets", "下载资源的保存目录")
 	exportWikiCmd.Flags().Bool("expand-sheets", true, "展开内嵌电子表格为 Markdown 表格（false 时保留 <sheet/> 引用）")
 	exportWikiCmd.Flags().Bool("expand-mentions", true, "展开 @用户为友好格式（false 时保留 <mention-user/> 标签以支持导入还原）")
+	exportWikiCmd.Flags().String("domainUrl", "", "导出引用 URL 的域名（仅输入 token 时生效，例如 https://xxx.feishu.cn）")
 	exportWikiCmd.Flags().String("user-access-token", "", "User Access Token（可选，用于访问个人知识库）")
 }

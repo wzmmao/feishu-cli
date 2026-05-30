@@ -1546,9 +1546,25 @@ func (c *BlockToMarkdown) convertTextElements(elements []*larkdocx.TextElement) 
 			if elem.MentionDoc.Token != nil {
 				token = *elem.MentionDoc.Token
 			}
-			docType := mapObjTypeToDocType(elem.MentionDoc.ObjType)
-			// 输出 HTML 标签格式（可被导入端解析还原）
-			result.WriteString(fmt.Sprintf("<mention-doc token=\"%s\" type=\"%s\">%s</mention-doc>", token, docType, title))
+			if c.options.MentionDocAsLink {
+				linkText := title
+				if linkText == "" {
+					linkText = token
+				}
+				linkURL := buildMentionDocURL(elem.MentionDoc, c.options.DomainURL)
+				if linkURL == "" && elem.MentionDoc.Url != nil {
+					linkURL = *elem.MentionDoc.Url
+				}
+				if linkText != "" && linkURL != "" {
+					result.WriteString(c.formatStyledText(linkText, nil, &linkURL))
+				} else if linkText != "" {
+					result.WriteString(escapeMarkdown(linkText))
+				}
+			} else {
+				docType := mapObjTypeToDocType(elem.MentionDoc.ObjType)
+				// 输出 HTML 标签格式（可被导入端解析还原）
+				result.WriteString(fmt.Sprintf("<mention-doc token=\"%s\" type=\"%s\">%s</mention-doc>", token, docType, title))
+			}
 		}
 
 		if elem.Equation != nil {
@@ -1643,6 +1659,47 @@ func inlineLinkPreviewTextAndURL(linkPreview *larkdocx.InlineLinkPreview) (strin
 		text = *linkPreview.Url
 	}
 	return text, linkPreview.Url
+}
+
+func buildMentionDocURL(mentionDoc *larkdocx.MentionDoc, domainURL string) string {
+	if mentionDoc == nil || mentionDoc.Token == nil || *mentionDoc.Token == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s/%s", normalizeExportDomainURL(domainURL), mentionDocPath(mapObjTypeToDocType(mentionDoc.ObjType)), *mentionDoc.Token)
+}
+
+func mentionDocPath(docType string) string {
+	switch strings.ToLower(strings.TrimSpace(docType)) {
+	case "wiki":
+		return "wiki"
+	case "sheet":
+		return "sheets"
+	case "slides":
+		return "slides"
+	case "bitable":
+		return "base"
+	default:
+		return "docx"
+	}
+}
+
+func normalizeExportDomainURL(domainURL string) string {
+	raw := strings.TrimSpace(domainURL)
+	if raw == "" {
+		return "https://feishu.cn"
+	}
+	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+		raw = "https://" + raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Hostname() == "" {
+		return "https://feishu.cn"
+	}
+	scheme := parsed.Scheme
+	if scheme == "" {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s", scheme, parsed.Host)
 }
 
 // wrapHighlightSpan 将带颜色的文本包装为 HTML span 标签

@@ -43,6 +43,7 @@ var exportMarkdownCmd = &cobra.Command{
 		output, _ := cmd.Flags().GetString("output")
 		downloadImages, _ := cmd.Flags().GetBool("download-images")
 		assetsDir, _ := cmd.Flags().GetString("assets-dir")
+		domainURL, _ := cmd.Flags().GetString("domainUrl")
 
 		// 获取可选的 User Access Token（用于访问无 App 权限的文档）
 		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
@@ -65,11 +66,13 @@ var exportMarkdownCmd = &cobra.Command{
 			DownloadImages:  downloadImages,
 			AssetsDir:       assetsDir,
 			DocumentID:      documentID,
+			DomainURL:       domainURL,
 			UserAccessToken: userAccessToken,
 			Debug:           cfg.Debug,
 			FrontMatter:     frontMatter,
 			Highlight:       highlight,
 			ExpandMentions:  expandMentions,
+			MentionDocAsLink: true,
 			ExpandSheets:    expandSheets,
 		}
 
@@ -95,6 +98,8 @@ var exportMarkdownCmd = &cobra.Command{
 			fm := fmt.Sprintf("---\ntitle: %q\ndocument_id: %s\n---\n\n", docTitle, documentID)
 			markdown = fm + markdown
 		}
+		docURL := buildDocReferenceURL(args[0], documentID, domainURL)
+		markdown = prependReferenceQuote(markdown, docURL)
 
 		// Output
 		if output != "" {
@@ -137,5 +142,6 @@ func init() {
 	exportMarkdownCmd.Flags().Bool("highlight", false, "保留文本颜色和背景色 (输出为 HTML span)")
 	exportMarkdownCmd.Flags().Bool("expand-mentions", true, "展开 @用户为友好格式 (需要 contact:user.base:readonly 权限)")
 	exportMarkdownCmd.Flags().Bool("expand-sheets", true, "自动展开内嵌飞书电子表格为 Markdown 表格")
+	exportMarkdownCmd.Flags().String("domainUrl", "", "导出引用 URL 的域名（仅输入 token 时生效，例如 https://xxx.feishu.cn）")
 	exportMarkdownCmd.Flags().String("user-access-token", "", "User Access Token（用于访问无 App 权限的文档，自动从 auth login 读取）")
 }

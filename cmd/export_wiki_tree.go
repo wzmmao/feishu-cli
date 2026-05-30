@@ -79,6 +79,7 @@ var exportWikiTreeCmd = &cobra.Command{
 		includeTypes, _ := cmd.Flags().GetStringSlice("include-types")
 		skipExisting, _ := cmd.Flags().GetBool("skip-existing")
 		continueOnError, _ := cmd.Flags().GetBool("continue-on-error")
+		domainURL, _ := cmd.Flags().GetString("domainUrl")
 
 		userAccessToken := resolveOptionalUserTokenWithFallback(cmd)
 
@@ -154,6 +155,12 @@ var exportWikiTreeCmd = &cobra.Command{
 				}
 				continue
 			}
+			referenceInput := job.Node.NodeToken
+			if job.Node.NodeToken == rootToken {
+				referenceInput = args[0]
+			}
+			wikiURL := buildWikiReferenceURL(referenceInput, job.Node.NodeToken, domainURL)
+			markdown = prependReferenceQuote(markdown, wikiURL)
 
 			if err := os.WriteFile(job.OutputPath, []byte(markdown), 0600); err != nil {
 				stats.Failed++
@@ -427,5 +434,6 @@ func init() {
 	exportWikiTreeCmd.Flags().Bool("expand-mentions", true, "展开 @用户为友好格式（false 时保留 <mention-user/> 标签以支持导入还原）")
 	exportWikiTreeCmd.Flags().Bool("skip-existing", false, "已存在且非空的 md 跳过（适合增量同步）")
 	exportWikiTreeCmd.Flags().Bool("continue-on-error", true, "单个节点导出失败时是否继续后续节点")
+	exportWikiTreeCmd.Flags().String("domainUrl", "", "导出引用 URL 的域名（仅输入 token 时生效，例如 https://xxx.feishu.cn）")
 	exportWikiTreeCmd.Flags().String("user-access-token", "", "User Access Token（可选；默认优先使用 auth login 登录态，失败时回退 App Token）")
 }

@@ -75,6 +75,22 @@ func TestWikiExportCommandsRegisterExpandMentions(t *testing.T) {
 	}
 }
 
+func TestWikiExportCommandsRegisterDomainURL(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cmd  *cobra.Command
+	}{
+		{name: "wiki export", cmd: exportWikiCmd},
+		{name: "wiki export-tree", cmd: exportWikiTreeCmd},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.cmd.Flags().Lookup("domainUrl") == nil {
+				t.Fatal("domainUrl flag is not registered")
+			}
+		})
+	}
+}
+
 func TestNewExportBlockToMarkdownConverterExpandMentions(t *testing.T) {
 	resolver := &fakeExportUserResolver{
 		users: map[string]converter.MentionUserInfo{
@@ -128,6 +144,31 @@ func TestNewExportBlockToMarkdownConverterPreservesMentionTagsWhenDisabled(t *te
 	}
 	if resolver.calls != 0 {
 		t.Fatalf("resolver calls = %d, want 0", resolver.calls)
+	}
+}
+
+func TestBuildWikiReferenceURLFromInputURL(t *testing.T) {
+	got := buildWikiReferenceURL("https://xxx.feishu.cn/wiki/Ad8Iw0oz3iSp4kkIi7QctVhin3e?foo=1#bar", "Ad8Iw0oz3iSp4kkIi7QctVhin3e", "")
+	want := "https://xxx.feishu.cn/wiki/Ad8Iw0oz3iSp4kkIi7QctVhin3e"
+	if got != want {
+		t.Fatalf("buildWikiReferenceURL() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildWikiReferenceURLFromToken(t *testing.T) {
+	got := buildWikiReferenceURL("Ad8Iw0oz3iSp4kkIi7QctVhin3e", "Ad8Iw0oz3iSp4kkIi7QctVhin3e", "")
+	want := "https://feishu.cn/wiki/Ad8Iw0oz3iSp4kkIi7QctVhin3e"
+	if got != want {
+		t.Fatalf("buildWikiReferenceURL() = %q, want %q", got, want)
+	}
+}
+
+func TestPrependReferenceQuote(t *testing.T) {
+	markdown := "# 标题\n\n正文"
+	got := prependReferenceQuote(markdown, "https://xxx.feishu.cn/wiki/Ad8Iw0oz3iSp4kkIi7QctVhin3e")
+	want := "> https://xxx.feishu.cn/wiki/Ad8Iw0oz3iSp4kkIi7QctVhin3e\n\n# 标题\n\n正文"
+	if got != want {
+		t.Fatalf("prependReferenceQuote() = %q, want %q", got, want)
 	}
 }
 
